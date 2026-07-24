@@ -59,23 +59,7 @@ Opens webcam index `0`, runs detection frame by frame, displays an
 annotated live window, and prints a JSON detection report to the terminal
 for every frame containing at least one detection.
 
-### Specific camera index
 
-```bash
-python live_inference.py --source 1
-```
-
-### Video file
-
-```bash
-python live_inference.py --source path/to/video.mp4
-```
-
-### Single image
-
-```bash
-python live_inference.py --source path/to/photo.jpg
-```
 
 ### Additional options
 
