@@ -40,12 +40,6 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Trained weights are copied into the module before first use:
-
-```bash
-mkdir -p models
-cp runs/detect/train4/weights/best.pt models/best.pt
-```
 
 ## Usage
 
