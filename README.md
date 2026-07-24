@@ -49,7 +49,7 @@ cp runs/detect/train4/weights/best.pt models/best.pt
 
 ## Usage
 
-### Webcam (default)
+### Webcam 
 
 ```bash
 python live_inference.py
@@ -67,10 +67,7 @@ for every frame containing at least one detection.
 |--------------------------|------------------------------------------------------|-------------------|
 | `--model`                | Path to trained weights                              | `models/best.pt`  |
 | `--source`               | Webcam index, video path, or image path              | `0`               |
-| `--conf`                 | Confidence threshold                                 | `0.4`             |
-| `--iou`                  | IoU threshold for non-max suppression                | `0.5`             |
-| `--print-empty-frames`   | Print JSON even when no detections are found         | off               |
-| `--no-log-file`          | Disable JSONL logging to disk                        | logging enabled   |
+
 
 ## Controls (live/video window)
 
