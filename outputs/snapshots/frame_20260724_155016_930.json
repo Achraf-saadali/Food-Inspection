@@ -1,0 +1,29 @@
+{
+  "frame_id": 255,
+  "timestamp": "2026-07-24T15:50:16.928",
+  "source": "0",
+  "image_size": {
+    "width": 640,
+    "height": 480
+  },
+  "num_detections": 1,
+  "detections": [
+    {
+      "label": "bell pepper/capsicum",
+      "class_id": 8,
+      "confidence": 0.8191,
+      "bbox_xyxy": [
+        408.2,
+        41.8,
+        568.8,
+        271.1
+      ],
+      "bbox_normalized": [
+        0.6378,
+        0.0871,
+        0.8888,
+        0.5647
+      ]
+    }
+  ]
+}

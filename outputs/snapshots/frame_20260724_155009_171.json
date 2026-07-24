@@ -1,0 +1,11 @@
+{
+  "frame_id": 242,
+  "timestamp": "2026-07-24T15:50:09.169",
+  "source": "0",
+  "image_size": {
+    "width": 640,
+    "height": 480
+  },
+  "num_detections": 0,
+  "detections": []
+}

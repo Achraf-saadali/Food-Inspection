@@ -1,0 +1,29 @@
+{
+  "frame_id": 385,
+  "timestamp": "2026-07-24T15:51:28.561",
+  "source": "0",
+  "image_size": {
+    "width": 640,
+    "height": 480
+  },
+  "num_detections": 1,
+  "detections": [
+    {
+      "label": "tomato",
+      "class_id": 59,
+      "confidence": 0.4721,
+      "bbox_xyxy": [
+        172.6,
+        276.6,
+        394.9,
+        480.0
+      ],
+      "bbox_normalized": [
+        0.2697,
+        0.5763,
+        0.617,
+        1.0
+      ]
+    }
+  ]
+}
