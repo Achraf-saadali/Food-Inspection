@@ -26,7 +26,7 @@ Controls (live/video window)
   q   -> quit
   ESC -> quit
 
-Author: Achraf — PFE / ingredient-detection pipeline
+
 """
 
 import argparse
