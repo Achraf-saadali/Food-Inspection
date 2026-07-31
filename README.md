@@ -691,101 +691,11 @@ This diagram now corresponds to stages 4–7 of the full system architecture
 presented at the beginning of this document (detection, cropping, VLM
 reasoning, and merged result) — implemented via `inspection_pipeline.py` and
 served over HTTP via `api.py`. Acquisition and alerting remain as described
-there. Full component breakdown and data flow: [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+there.
 
 ---
 
-# 17. Integration Notes
 
-`schemas.py` now defines the unified payload structure consumed by every
-downstream component, extending what `build_detection_json()` originally
-provided.
-
-### FastAPI — implemented
-
-```text
-POST /detect    detection only
-POST /inspect   detection + VLM reasoning
-GET  /health
-```
-
-These endpoints (`api.py`) replace the local `cv2.imshow`-based interaction
-with a request/response interface for detection-only and full-inspection
-use cases.
-
-### VLM Triggering — implemented
-
-The VLM stage is currently triggered by a confidence gate on the YOLO
-detection (default `0.4`, configurable per request). Triggering on specific
-ingredients or ingredient combinations is not yet implemented.
-
-### Database — planned
-
-Inspection results can eventually be persisted in a database instead of
-local JSONL files.
-
-### Dashboard — planned
-
-The structured detection and VLM results can be consumed by a real-time
-monitoring dashboard once stage 8 of the architecture is built.
-
----
-
-# 18. Current Project Status
-
-| Component                          | Status         |
-| ------------------------------------ | -------------- |
-| Dataset preparation                 | ✅ Completed    |
-| YOLO dataset conversion             | ✅ Completed    |
-| YOLOv9c training                    | ✅ Completed    |
-| YOLO inference                      | ✅ Functional   |
-| Webcam inference                    | ✅ Functional   |
-| JSON detection output               | ✅ Functional   |
-| Detection logging                   | ✅ Functional   |
-| Unified YOLO + VLM JSON schema      | ✅ Functional   |
-| VLM backend interface               | ✅ Functional   |
-| Qwen2.5-VL integration              | ✅ Functional   |
-| GPT-4o Vision integration           | ✅ Functional (reference backend) |
-| Pipeline orchestration (crop→VLM→merge) | ✅ Functional |
-| FastAPI `/detect`, `/inspect`       | ✅ Functional   |
-| VLM benchmark (latency/VRAM/agreement) | 🔄 In progress |
-| Per-class distribution analysis     | 🔄 Planned     |
-| Decision-layer severity thresholds  | 🔄 Planned     |
-| Notification / alerting service     | 🔄 Planned     |
-| Persistent storage (database)       | 🔄 Planned     |
-| Monitoring dashboard                | 🔄 Planned     |
-
-See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design rationale behind
-each implemented component and the key learnings from this integration pass.
-
----
-
-# 19. Next Steps
-
-1. **Finalize the VLM benchmark**
-   * Compare Qwen2.5-VL and GPT-4o Vision on real YOLO-generated crops using `benchmark_vlm.py`.
-   * Measure latency, GPU memory, and agreement with human annotations.
-   * Publish results in Section 9.
-
-2. **Analyze class distribution**
-   * Generate the training/validation class-frequency histogram.
-   * Identify rare and underrepresented classes.
-
-3. **Address class imbalance**
-   * Evaluate targeted augmentation.
-   * Consider oversampling or loss weighting for rare classes.
-   * Review duplicated or low-frequency classes.
-
-4. **Add the decision layer**
-   * Define severity thresholds over `QualityAssessment` to decide what counts as alert-worthy.
-   * Wire threshold logic on top of the existing `InspectionResult` schema (no changes needed to detection or reasoning stages).
-
-5. **Build the notification service**
-   * Route high-severity results from the decision layer to quality-control staff.
-
-6. **Persist results and add a dashboard**
-   * Replace JSONL logs with database storage.
-   * Build a real-time monitoring dashboard on top of `/inspect` output.
 
 ```text
 Camera
@@ -807,29 +717,8 @@ Database / Dashboard / Alerts   🔄
 
 ---
 
-# 20. Future Direction
 
-The objective of the project is to evolve the current food-detection module into a complete AI-assisted food inspection system, combining:
-
-* Real-time object detection ✅
-* Visual quality assessment ✅
-* Multimodal reasoning ✅
-* Structured inspection results ✅
-* API-based deployment ✅
-* Persistent inspection logs 🔄
-* Real-time monitoring and alerting 🔄
-
-The YOLOv9c detection stage plus the integrated VLM reasoning stage now
-constitute the first two operational stages of this larger inspection
-architecture; the decision, storage, and alerting layers are the remaining
-work.
 
 ---
 
-## Author
 
-**Achraf Saadali**
-
-Food Inspection — YOLO + VLM
-
-Repository: [Food-Inspection](https://github.com/Achraf-saadali/Food-Inspection)
