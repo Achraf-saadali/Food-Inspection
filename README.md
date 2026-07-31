@@ -4,7 +4,7 @@
 
 The diagram below presents the complete end-to-end architecture of the platform, from image acquisition at the conveyor to alerting on the operator dashboard.
 
-![Industrial Food Inspection Platform Architecture](architecture-diagram.png)
+[![Industrial Food Inspection Platform Architecture](architecture-diagram.png)](https://github.com/Achraf-saadali/Food-Inspection/blob/main/diagram-export-31-07-2026-16_31_48.png?raw=true)
 
 The system is organized into eight stages:
 
