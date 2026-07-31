@@ -1,9 +1,6 @@
 # Food Inspection — YOLO + VLM
 
-> **Design deep-dive:** see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full
-> reasoning behind the VLM integration — backend interface design, prompt
-> engineering learnings, and why detection and reasoning are kept as two
-> separate stages.
+
 
 ## Full System Architecture
 
