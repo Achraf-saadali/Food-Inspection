@@ -1,0 +1,94 @@
+"""
+Unified JSON contract for the Food-Inspection pipeline.
+
+Both the YOLO detection stage and the VLM reasoning stage write into these
+models, so downstream consumers (dashboard, DB, notification service) only
+ever need to understand one schema.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class InspectionStatus(str, Enum):
+    OK = "ok"
+    DEFECT = "defect"
+    UNCERTAIN = "uncertain"
+
+
+class DefectType(str, Enum):
+    NONE = "none"
+    MOLD = "mold"
+    BRUISING = "bruising"
+    DISCOLORATION = "discoloration"
+    FRESHNESS = "freshness"
+    OTHER = "other"
+
+
+class RequiredAction(str, Enum):
+    NONE = "none"
+    FLAG_FOR_REVIEW = "flag_for_review"
+    REMOVE = "remove"
+
+
+class ImageSize(BaseModel):
+    width: int
+    height: int
+
+
+class Detection(BaseModel):
+    """Output of the YOLO stage for a single object."""
+
+    label: str
+    class_id: int
+    confidence: float = Field(ge=0.0, le=1.0)
+    bbox_xyxy: List[float] = Field(min_length=4, max_length=4)
+    bbox_normalized: List[float] = Field(min_length=4, max_length=4)
+
+
+class QualityAssessment(BaseModel):
+    """Output of the VLM stage for a single crop. Optional because the VLM
+    stage may not run on every detection (e.g. skipped by confidence gate)."""
+
+    status: InspectionStatus
+    defect_type: DefectType = DefectType.NONE
+    freshness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    explanation: str
+    required_action: RequiredAction = RequiredAction.NONE
+    vlm_backend: str
+    latency_ms: Optional[float] = None
+
+
+class InspectionItem(BaseModel):
+    """One detected object plus its (optional) quality assessment."""
+
+    detection: Detection
+    quality: Optional[QualityAssessment] = None
+
+
+class InspectionResult(BaseModel):
+    """Top-level unified result for one processed frame/image."""
+
+    frame_id: int
+    timestamp: datetime
+    source: str
+    image_size: ImageSize
+    num_detections: int
+    items: List[InspectionItem]
+
+    def to_legacy_detection_json(self) -> dict:
+        """Backwards-compatible view matching the existing
+        build_detection_json() output, for consumers not yet updated."""
+        return {
+            "frame_id": self.frame_id,
+            "timestamp": self.timestamp.isoformat(),
+            "source": self.source,
+            "image_size": self.image_size.model_dump(),
+            "num_detections": self.num_detections,
+            "detections": [item.detection.model_dump() for item in self.items],
+        }
