@@ -1,14 +1,35 @@
 # Food Inspection — YOLO + VLM
 
+## Full System Architecture
+
+The diagram below presents the complete end-to-end architecture of the platform, from image acquisition at the conveyor to alerting on the operator dashboard.
+
+![Industrial Food Inspection Platform Architecture](architecture-diagram.png)
+
+The system is organized into eight stages:
+
+1. **Image Acquisition** — a conveyor-mounted inspection camera captures frames and encodes them as a JPEG byte stream.
+2. **Communication** — a client application receives the camera feed and transmits it to the backend through a `POST /detect` request.
+3. **Backend Processing** — a FastAPI server receives the JPEG bytes, decodes them with OpenCV into a NumPy array, and hands the resulting tensor to the detector.
+4. **Object Detection** — the YOLOv9c model (63 classes) processes the image through its backbone, neck, and detection head, producing bounding boxes, class identifiers, and confidence scores.
+5. **Cropping** — each detected object is cropped from the source image and paired with a quality-inspection prompt.
+6. **Vision Reasoning (VLM)** — a general-purpose or fine-tuned Vision-Language Model evaluates each crop for spoilage, damage, or defect evidence, producing a structured output containing item status, defect type, freshness score, explanation, and required follow-up action.
+7. **Decision Layer** — detection metadata from YOLO and reasoning output from the VLM are merged into a unified inspection result.
+8. **Visualization and Alerts** — results are displayed on a quality-monitoring dashboard and, when a defect exceeds a defined severity threshold, routed to a notification service that alerts quality-control staff.
+
+This architecture reflects the target design of the system. The implementation described in the remainder of this document currently covers stages 1 and 4 (image acquisition and object detection); the reasoning, decision, and alerting stages are in development, as detailed in Sections 8–9 and 18.
+
+---
+
 ## Overview
 
 **Food Inspection** is a computer-vision pipeline for food ingredient inspection, combining **object detection with YOLO** and a planned **Vision-Language Model (VLM)** reasoning stage.
 
-The current implementation focuses on the first stage of the pipeline: **real-time detection and classification of food ingredients**, particularly fruits and vegetables. A custom-trained **YOLOv9c** model detects and labels 63 ingredient classes and produces structured JSON detection reports.
+The current implementation covers the first stage of the pipeline: **real-time detection and classification of food ingredients**, particularly fruits and vegetables. A custom-trained **YOLOv9c** model detects and labels 63 ingredient classes and produces structured JSON detection reports.
 
-The long-term objective is to extend this detection stage with a VLM capable of reasoning about the visual condition of detected ingredients, including potential freshness defects, bruising, mold, or other quality anomalies.
+The intended extension of this work is a VLM stage capable of reasoning about the visual condition of detected ingredients, including freshness defects, bruising, mold, or other quality anomalies.
 
-### Pipeline
+### Pipeline (Detection Stage)
 
 ```text
 Camera / Image / Video
@@ -30,25 +51,25 @@ Camera / Image / Video
         ├── Quality status
         ├── Defect type
         ├── Explanation
-        └── Recommended action
+        └── Required action
         │
         ▼
  Structured Inspection Result
 ```
 
-The YOLO detection stage is currently functional and versioned. The VLM reasoning stage is under integration.
+The YOLO detection stage is functional and versioned. The VLM reasoning stage is under integration.
 
 ---
 
 # 1. Project Objectives
 
-The project is being developed as a two-stage food-inspection system:
+The project is designed as a two-stage food-inspection system.
 
 ### Stage 1 — Object Detection
 
 Detect and classify food ingredients in an image or video stream.
 
-The current YOLO model recognizes **63 fruit and vegetable classes** and returns:
+The YOLO model recognizes **63 fruit and vegetable classes** and returns:
 
 * Object class
 * Class ID
@@ -58,9 +79,7 @@ The current YOLO model recognizes **63 fruit and vegetable classes** and returns
 
 ### Stage 2 — Visual Quality Reasoning
 
-The detected objects can subsequently be passed to a VLM together with a quality-inspection prompt.
-
-For example:
+Detected objects are subsequently passed to a VLM together with a quality-inspection prompt, for example:
 
 > Does this food item show any visible freshness defect, bruising, mold, discoloration, or other quality issue?
 
@@ -69,9 +88,9 @@ The VLM is expected to return a structured assessment containing:
 * Inspection status
 * Defect type
 * Explanation
-* Recommended action
+* Required action
 
-This second stage is currently under development.
+This stage is currently under development.
 
 ---
 
@@ -113,7 +132,7 @@ Food-Inspection/
 
 ## 3.1 Model
 
-The current detection model is:
+The current detection model is defined as follows:
 
 * **Architecture:** YOLOv9c
 * **Task:** Object detection
@@ -139,7 +158,7 @@ The trained model detects ingredients such as:
 
 ---
 
-# 4. Why YOLOv9c?
+# 4. YOLOv9c
 
 Several YOLO generations were considered for the detection stage.
 
@@ -151,19 +170,18 @@ Several YOLO generations were considered for the detection stage.
 | YOLOv10     |         ~54–58% | Very fast     | NMS-free inference                          | Younger ecosystem                    |
 | YOLO11      |         ~55–59% | Fast          | Refined backbone, good overall balance      | Less long-term production experience |
 
-### Selected model: YOLOv9c
+### Model choice: YOLOv9c
 
-YOLOv9c was selected because it provides a good balance between:
+YOLOv9c was selected on the basis of four factors:
 
 1. Detection accuracy
 2. Training cost
 3. GPU memory requirements
-4. Detection of medium and relatively small objects
-5. Near-real-time inference capability
+4. Ability to detect medium and relatively small objects, with near-real-time inference
 
-The **PGI (Programmable Gradient Information)** and **GELAN** architecture are particularly relevant when information needs to be preserved through deeper layers, which can help with small or partially occluded objects.
+The **PGI (Programmable Gradient Information)** and **GELAN** architecture are particularly relevant when information must be preserved through deeper layers, which is beneficial for small or partially occluded objects.
 
-The compact **`c`** variant was preferred over the larger `e` variant because it reduces training time and GPU memory requirements while remaining appropriate for a dataset of approximately 8,000 images and 63 classes.
+The compact **`c`** variant was chosen over the larger `e` variant because it reduces training time and GPU memory requirements while remaining appropriate for a dataset of approximately 8,000 images and 63 classes.
 
 ---
 
@@ -171,7 +189,7 @@ The compact **`c`** variant was preferred over the larger `e` variant because it
 
 ## LVIS Fruits & Vegetables Detection Dataset
 
-The detection model was trained using a filtered subset of the **LVIS (Large Vocabulary Instance Segmentation)** dataset.
+The detection model was trained on a filtered subset of the **LVIS (Large Vocabulary Instance Segmentation)** dataset.
 
 | Attribute              | Value                                             |
 | ---------------------- | ------------------------------------------------- |
@@ -216,31 +234,21 @@ This corresponds approximately to:
 18% validation
 ```
 
-The split is inherited from the dataset source rather than being a random split created specifically for this project.
+The split is inherited from the dataset source rather than constructed as a random split for this project. This provides reproducibility between experiments, although it does not necessarily guarantee balanced representation across classes.
 
-This provides reproducibility between experiments, although it does not necessarily guarantee perfect class stratification.
-
-### Possible splitting strategies
+### Alternative splitting strategies
 
 #### Random split
 
 Each image is independently assigned to training or validation.
 
-**Advantages:**
+**Advantages:** simple, fast, easy to reproduce.
 
-* Simple
-* Fast
-* Easy to reproduce
-
-**Limitation:**
-
-Rare classes can become over- or under-represented.
+**Limitation:** rare classes can become over- or under-represented.
 
 #### Stratified split
 
-The class distribution is preserved between training and validation.
-
-This is preferable when working with a strongly imbalanced dataset.
+The class distribution is preserved between training and validation. This is preferable when working with a strongly imbalanced dataset.
 
 #### Scenario/source-based split
 
@@ -253,45 +261,36 @@ Conveyor
 Other acquisition environment
 ```
 
-This can help reduce information leakage between training and validation.
+This can reduce information leakage between training and validation.
 
 ---
 
 # 7. Class Imbalance
 
-The LVIS dataset naturally follows a **long-tail distribution**.
+The LVIS dataset follows a **long-tail distribution**: a relatively small number of classes account for a large proportion of the available instances, while other classes appear in only a limited number of images.
 
-A relatively small number of classes can contain a large proportion of the available instances, while other classes may appear only in a limited number of images.
+In this project, common vegetable classes have considerably more training examples than rarer ingredient classes.
 
-For this project, classes such as common vegetables may have considerably more training examples than rare ingredient classes.
-
-There are also two duplicated classes inherited from the original LVIS data with capitalization variants:
+Two duplicated classes are also inherited from the original LVIS data, differing only by capitalization:
 
 ```text
 Tomato
 Strawberry
 ```
 
-These classes contain relatively few images and currently do not significantly affect the training process.
+These classes contain relatively few images and do not currently have a significant effect on training.
 
-## Recommended strategies
+## Approaches to Class Imbalance
 
-Several approaches can be used to address class imbalance:
+Several methods are applicable to this type of imbalance.
 
 ### Per-class evaluation
 
-Instead of relying only on global mAP, monitor:
-
-* Per-class mAP
-* Precision
-* Recall
-* Number of instances per class
-
-This makes it possible to identify classes whose performance is limited by insufficient training data.
+Rather than relying solely on global mAP, per-class mAP, precision, recall, and instance counts can be monitored individually. This allows classes whose performance is limited by insufficient training data to be identified.
 
 ### Targeted augmentation
 
-Rare classes can benefit from additional augmentation techniques such as:
+Rare classes can be augmented through techniques such as:
 
 * Mosaic
 * Copy-paste
@@ -307,13 +306,13 @@ Images containing rare classes can be sampled more frequently during training.
 
 ### Loss weighting
 
-The contribution of underrepresented classes can potentially be increased through loss weighting.
+The contribution of underrepresented classes to the loss function can be increased through weighting.
 
 ### Class consolidation
 
-Classes that are duplicated or provide little value for the final inspection use case may eventually be merged or removed.
+Classes that are duplicated, or that provide limited value for the inspection use case, may be merged or removed.
 
-> The exact class-frequency distribution still needs to be generated directly from the annotation files and added to the repository.
+> The class-frequency distribution has not yet been generated from the annotation files and remains to be added to the repository.
 
 ---
 
@@ -321,7 +320,7 @@ Classes that are duplicated or provide little value for the final inspection use
 
 The second stage of the pipeline is based on a **Vision-Language Model**.
 
-Instead of sending the complete image to the VLM, the intended approach is to use the YOLO detections to identify relevant objects and provide their crops to the VLM.
+Rather than sending the complete image to the VLM, the intended approach uses YOLO detections to identify relevant objects and supplies their crops to the VLM. This reduces unnecessary visual information and focuses the reasoning stage on the detected food item.
 
 Conceptually:
 
@@ -344,9 +343,7 @@ Object crops
 Quality assessment
 ```
 
-This reduces unnecessary visual information and focuses the reasoning stage on the detected food item.
-
-The VLM can receive:
+The VLM receives:
 
 1. The detected object crop
 2. The detected ingredient class
@@ -369,7 +366,7 @@ Return:
 - status
 - defect type
 - explanation
-- recommended action
+- required action
 ```
 
 ---
@@ -378,32 +375,30 @@ Return:
 
 Several VLM candidates were considered for the reasoning stage.
 
-| Model                  | Type            | Visual reasoning                                       | Speed         | Open source | Approx. GPU memory     |
-| ---------------------- | --------------- | ------------------------------------------------------ | ------------- | ----------- | ---------------------- |
-| LLaVA 1.5 / 1.6        | Open-source VLM | Good general description, weaker fine reasoning        | Moderate      | Yes         | ~8 GB for quantized 7B |
-| **Qwen2.5-VL**         | Open-source VLM | High, strong spatial grounding and fine visual details | Moderate–fast | Yes         | ~8 GB for 3B           |
-| InternVL 2.5 / 3       | Open-source VLM | High, strong perception and OCR                        | Moderate      | Yes         | ~16 GB+                |
-| Phi-3 / Phi-3.5 Vision | Open-source VLM | Good for its size, less robust on ambiguous cases      | Fast          | Yes         | ~4–8 GB                |
-| GPT-4o Vision          | Proprietary API | Very high contextual reasoning                         | API-dependent | No          | Hosted                 |
+| Model                  | Type            | Visual reasoning                                        | Speed         | Open source | Approx. GPU memory     |
+| ----------------------- | --------------- | -------------------------------------------------------- | ------------- | ----------- | ----------------------- |
+| LLaVA 1.5 / 1.6         | Open-source VLM | Good general description, weaker fine reasoning          | Moderate      | Yes         | ~8 GB for quantized 7B |
+| **Qwen2.5-VL**          | Open-source VLM | High; strong spatial grounding and fine visual detail    | Moderate–fast | Yes         | ~8 GB for 3B            |
+| InternVL 2.5 / 3        | Open-source VLM | High; strong perception and OCR                          | Moderate      | Yes         | ~16 GB+                 |
+| Phi-3 / Phi-3.5 Vision  | Open-source VLM | Adequate for its size, less robust on ambiguous cases     | Fast          | Yes         | ~4–8 GB                 |
+| GPT-4o Vision           | Proprietary API | Very high contextual reasoning                            | API-dependent | No          | Hosted                  |
 
-## Current recommendation
+## Model Selection Rationale
 
-**Qwen2.5-VL 7B** is currently the primary open-source candidate because it offers a good compromise between:
+**Qwen2.5-VL 7B** is currently the primary open-source candidate, based on a balance of:
 
 * Visual reasoning quality
 * GPU memory requirements
 * Inference cost
 * Deployment flexibility
 
-**GPT-4o Vision** can be used as a high-accuracy reference for ambiguous cases and for validating the quality of the open-source VLM results.
+**GPT-4o Vision** is used as a high-accuracy reference for ambiguous cases and to evaluate the output quality of the open-source VLM.
 
-The final VLM selection remains pending integration experiments.
+Final VLM selection is pending integration experiments.
 
 ### Planned evaluation
 
-The VLM candidates will be evaluated using real crops generated by the YOLOv9c detector.
-
-The comparison should include:
+The VLM candidates will be evaluated using real crops generated by the YOLOv9c detector. The comparison will examine:
 
 * Real inference latency
 * GPU VRAM usage
@@ -456,15 +451,11 @@ The default webcam index is:
 0
 ```
 
-The application processes the webcam stream frame by frame and displays the detected objects.
-
-For frames containing detections, a structured JSON report is also generated.
+The application processes the webcam stream frame by frame and displays the detected objects. For frames containing detections, a structured JSON report is also generated.
 
 ---
 
 ## Image
-
-Specify an image as the source:
 
 ```bash
 python live_inference.py --source path/to/image.jpg
@@ -487,19 +478,19 @@ python live_inference.py --model path/to/model.pt
 # 12. Inference Options
 
 | Argument   | Description                             | Default          |
-| ---------- | --------------------------------------- | ---------------- |
+| ---------- | ---------------------------------------- | ----------------- |
 | `--model`  | Path to trained YOLO weights            | `models/best.pt` |
-| `--source` | Webcam index, image path, or video path | `0`              |
+| `--source` | Webcam index, image path, or video path | `0`               |
 
 ---
 
 # 13. Live Controls
 
-| Key   | Action                                           |
-| ----- | ------------------------------------------------ |
-| `s`   | Save the current annotated frame and JSON report |
-| `q`   | Stop the inference session                       |
-| `ESC` | Stop the inference session                       |
+| Key   | Action                                            |
+| ----- | -------------------------------------------------- |
+| `s`   | Save the current annotated frame and JSON report  |
+| `q`   | Stop the inference session                        |
+| `ESC` | Stop the inference session                        |
 
 Saved snapshots are stored in:
 
@@ -566,19 +557,19 @@ Example:
 
 ### JSON fields
 
-| Field             | Description                             |
-| ----------------- | --------------------------------------- |
-| `frame_id`        | Sequential index of the processed frame |
-| `timestamp`       | ISO-8601 detection timestamp            |
-| `source`          | Camera index, video path, or image path |
-| `image_size`      | Width and height of the processed frame |
-| `num_detections`  | Number of detected objects              |
-| `detections`      | List of individual detections           |
-| `label`           | Predicted ingredient class              |
-| `class_id`        | Predicted class index, 0–62             |
-| `confidence`      | Detection confidence between 0 and 1    |
-| `bbox_xyxy`       | Bounding box in pixel coordinates       |
-| `bbox_normalized` | Bounding box normalized to `[0, 1]`     |
+| Field              | Description                              |
+| ------------------- | ----------------------------------------- |
+| `frame_id`          | Sequential index of the processed frame  |
+| `timestamp`         | ISO-8601 detection timestamp             |
+| `source`            | Camera index, video path, or image path  |
+| `image_size`        | Width and height of the processed frame  |
+| `num_detections`    | Number of detected objects               |
+| `detections`        | List of individual detections            |
+| `label`             | Predicted ingredient class               |
+| `class_id`          | Predicted class index, 0–62              |
+| `confidence`        | Detection confidence between 0 and 1     |
+| `bbox_xyxy`         | Bounding box in pixel coordinates        |
+| `bbox_normalized`   | Bounding box normalized to `[0, 1]`      |
 
 ---
 
@@ -602,9 +593,9 @@ The logs are intended for future integration with:
 
 ---
 
-# 16. Current Architecture
+# 16. Current Architecture (Detection Stage)
 
-The current implementation can be represented as:
+The current implementation of the detection stage can be represented as:
 
 ```text
                  ┌─────────────────────┐
@@ -642,13 +633,13 @@ The current implementation can be represented as:
                  └─────────────────────┘
 ```
 
+This diagram corresponds to stages 4–6 of the full system architecture presented at the beginning of this document; the acquisition, communication, decision, and alerting stages surrounding it are detailed there.
+
 ---
 
 # 17. Integration Notes
 
-The existing `build_detection_json()` function provides the basic payload structure required by downstream components.
-
-The detection output can be extended to support the complete inspection pipeline.
+The existing `build_detection_json()` function provides the basic payload structure required by downstream components. The detection output can be extended to support the complete inspection pipeline.
 
 Potential integration points include:
 
@@ -684,7 +675,7 @@ The structured detection and VLM results can be consumed by a real-time monitori
 # 18. Current Project Status
 
 | Component                       | Status         |
-| ------------------------------- | -------------- |
+| -------------------------------- | -------------- |
 | Dataset preparation             | ✅ Completed    |
 | YOLO dataset conversion         | ✅ Completed    |
 | YOLOv9c training                | ✅ Completed    |
@@ -703,31 +694,24 @@ The structured detection and VLM results can be consumed by a real-time monitori
 
 # 19. Next Steps
 
-The next development steps are:
-
 1. **Finalize the VLM benchmark**
-
    * Compare Qwen2.5-VL and GPT-4o Vision on real YOLO-generated crops.
    * Measure latency, GPU memory, and agreement with human annotations.
 
 2. **Analyze class distribution**
-
    * Generate the training/validation class-frequency histogram.
    * Identify rare and underrepresented classes.
 
-3. **Improve class imbalance handling**
-
+3. **Address class imbalance**
    * Evaluate targeted augmentation.
    * Consider oversampling or loss weighting for rare classes.
-   * Review duplicated/low-frequency classes.
+   * Review duplicated or low-frequency classes.
 
 4. **Unify YOLO and VLM outputs**
-
    * Extend `build_detection_json()`.
-   * Create a common JSON contract containing both detection and reasoning results.
+   * Define a common JSON contract containing both detection and reasoning results.
 
 5. **Expose the pipeline through FastAPI**
-
    * Implement `/inspect`.
    * Replace the current local display loop with an API-based inspection pipeline.
 
@@ -755,9 +739,7 @@ Database / Dashboard / Alerts
 
 # 20. Future Direction
 
-The final objective is to evolve the current food-detection module into a complete **AI-assisted food inspection system**.
-
-The system will combine:
+The objective of the project is to evolve the current food-detection module into a complete AI-assisted food inspection system, combining:
 
 * Real-time object detection
 * Visual quality assessment
@@ -765,9 +747,9 @@ The system will combine:
 * Structured inspection results
 * API-based deployment
 * Persistent inspection logs
-* Potential real-time monitoring and alerting
+* Real-time monitoring and alerting
 
-The current YOLOv9c implementation therefore represents the **first operational stage** of the larger inspection architecture.
+The current YOLOv9c implementation constitutes the first operational stage of this larger inspection architecture.
 
 ---
 
