@@ -1,6 +1,23 @@
 # Food Inspection — YOLO + VLM
 
+## Quick Start (Presentation Mode)
 
+To launch the live webcam inspection with both **YOLO detection** and **VLM quality reasoning**, run:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with GPT-4o reasoning (requires OPENAI_API_KEY)
+python main.py --vlm gpt4o
+
+# Run detection-only (no VLM costs/latency)
+python main.py
+```
+
+**Controls:**
+- `s`: Save an annotated snapshot and JSON report to `outputs/snapshots/`.
+- `q` or `ESC`: Quit the application.
 
 ## Full System Architecture
 
@@ -125,14 +142,16 @@ Food-Inspection/
 ├── api.py
 ├── benchmark_vlm.py
 ├── live_inference.py
+├── main.py
 ├── ARCHITECTURE.md
-├── requirement.txt
+├── requirements.txt
 └── README.md
 ```
 
 | File / Folder             | Description                                                        |
 | -------------------------- | ------------------------------------------------------------------- |
-| `live_inference.py`        | Main inference script for webcam, video, or image input            |
+| `main.py`                  | Unified entrypoint for live quality inspection (YOLO + VLM)        |
+| `live_inference.py`        | Legacy inference script for detection only                          |
 | `models/best.pt`           | Trained YOLOv9c weights for 63 classes                              |
 | `schemas.py`                | Unified JSON contract shared by the detection and VLM stages        |
 | `vlm_reasoning.py`          | Backend-agnostic VLM interface (Qwen2.5-VL, GPT-4o)                 |
@@ -144,7 +163,7 @@ Food-Inspection/
 | `trainning_runs/train4/`   | Training artifacts, metrics, curves and confusion matrix            |
 | `notebooks/`                | Experimentation and training notebooks                              |
 | `ARCHITECTURE.md`           | Design decisions, data flow, and learnings from the VLM integration |
-| `requirement.txt`           | Python dependencies                                                 |
+| `requirements.txt`          | Python dependencies                                                 |
 
 ---
 
