@@ -1,0 +1,11 @@
+ultralytics>=8.3.0
+opencv-python>=4.9.0
+torch>=2.2.0
+fastapi
+uvicorn
+pydantic
+openai
+transformers
+pillow
+numpy
+python-multipart
