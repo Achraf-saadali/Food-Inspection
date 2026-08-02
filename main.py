@@ -4,8 +4,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import os
 import cv2
 from ultralytics import YOLO
+from dotenv import load_dotenv
 
 from inspection_pipeline import run_inspection
 from vlm_reasoning import get_backend
@@ -18,6 +20,8 @@ from schemas import InspectionStatus
 DEFAULT_MODEL_PATH = "models/best.pt"
 DEFAULT_CONF_THRESHOLD = 0.4
 DEFAULT_IOU_THRESHOLD = 0.5
+load_dotenv()
+
 DEFAULT_VLM_CONF_GATE = 0.6  # Only run VLM on high-confidence detections
 
 OUTPUT_DIR = Path("outputs")
