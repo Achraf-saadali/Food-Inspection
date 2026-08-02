@@ -8,7 +8,10 @@ To launch the live webcam inspection with both **YOLO detection** and **VLM qual
 # Install dependencies
 pip install -r requirements.txt
 
-# Run with GPT-4o reasoning (requires OPENAI_API_KEY)
+# Configure API Key (copy .env.example to .env and add your key)
+cp .env.example .env
+
+# Run with GPT-4o reasoning
 python main.py --vlm gpt4o
 
 # Run detection-only (no VLM costs/latency)

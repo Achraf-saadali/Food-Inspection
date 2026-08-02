@@ -13,8 +13,10 @@ interface, per README Section 17 ("Integration Notes").
 
 from __future__ import annotations
 
+import os
 import io
 from functools import lru_cache
+from dotenv import load_dotenv
 
 import cv2
 import numpy as np
@@ -24,6 +26,8 @@ from ultralytics import YOLO
 from inspection_pipeline import run_inspection
 from schemas import InspectionResult
 from vlm_reasoning import get_backend
+
+load_dotenv()
 
 app = FastAPI(title="Food Inspection API", version="0.2.0")
 
