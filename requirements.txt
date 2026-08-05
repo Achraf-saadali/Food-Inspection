@@ -10,3 +10,4 @@ pillow
 numpy
 python-multipart
 python-dotenv
+accelerate
