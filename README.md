@@ -119,6 +119,9 @@ Launches a real-time window showing detections and quality reasoning.
 # Use OpenAI (GPT-4o)
 python main.py --vlm openai
 
+# Use Qwen-VL API (DashScope)
+python main.py --vlm qwen-api
+
 # Use Qwen2.5-VL (Local)
 python main.py --vlm qwen
 ```
