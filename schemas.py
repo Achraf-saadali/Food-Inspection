@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -56,8 +56,9 @@ class QualityAssessment(BaseModel):
     stage may not run on every detection (e.g. skipped by confidence gate)."""
 
     status: InspectionStatus
-    defect_type: DefectType = DefectType.NONE
-    freshness_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    overall_quality_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    quality_metrics: Dict[str, float] = Field(default_factory=dict)
+    defects: List[str] = Field(default_factory=list)
     explanation: str
     required_action: RequiredAction = RequiredAction.NONE
     vlm_backend: str

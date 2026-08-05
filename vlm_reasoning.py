@@ -20,19 +20,25 @@ from typing import Optional
 
 import numpy as np
 
-from schemas import DefectType, InspectionStatus, QualityAssessment, RequiredAction
+from quality_profiles import get_quality_metrics
+from schemas import InspectionStatus, QualityAssessment, RequiredAction
 
 QUALITY_PROMPT_TEMPLATE = """You are inspecting a food item detected by an object \
 detector as "{label}" (detector confidence: {confidence:.2f}).
 
-Inspect the image crop for visible quality defects: mold, bruising, \
-discoloration, freshness problems, or other visible abnormalities.
+Inspect the image crop for visible quality defects and assess specific metrics.
+
+Relevant quality metrics for {label}:
+{metrics_list}
 
 Respond with ONLY a JSON object, no other text, matching exactly this shape:
 {{
   "status": "ok" | "defect" | "uncertain",
-  "defect_type": "none" | "mold" | "bruising" | "discoloration" | "freshness" | "other",
-  "freshness_score": <float 0.0-1.0>,
+  "overall_quality_score": <float 0.0-1.0, where 1.0 is perfect quality>,
+  "quality_metrics": {{
+    {metrics_json_schema}
+  }},
+  "defects": ["<defect1>", "<defect2>", ...],
   "explanation": "<one sentence, concrete visual evidence>",
   "required_action": "none" | "flag_for_review" | "remove"
 }}"""
@@ -51,7 +57,16 @@ class VLMBackend(ABC):
     def analyze(
         self, crop: np.ndarray, label: str, confidence: float
     ) -> QualityAssessment:
-        prompt = QUALITY_PROMPT_TEMPLATE.format(label=label, confidence=confidence)
+        metrics = get_quality_metrics(label)
+        metrics_list = "\n".join([f"- {m}" for m in metrics])
+        metrics_json_schema = ",\n    ".join([f'"{m}": <float 0.0-1.0>' for m in metrics])
+        
+        prompt = QUALITY_PROMPT_TEMPLATE.format(
+            label=label, 
+            confidence=confidence,
+            metrics_list=metrics_list,
+            metrics_json_schema=metrics_json_schema
+        )
 
         start = time.perf_counter()
         try:
@@ -72,8 +87,9 @@ class VLMBackend(ABC):
         data = json.loads(cleaned)
         return QualityAssessment(
             status=InspectionStatus(data["status"]),
-            defect_type=DefectType(data.get("defect_type", "none")),
-            freshness_score=data.get("freshness_score"),
+            overall_quality_score=data.get("overall_quality_score"),
+            quality_metrics=data.get("quality_metrics", {}),
+            defects=data.get("defects", []),
             explanation=data.get("explanation", ""),
             required_action=RequiredAction(data.get("required_action", "none")),
             vlm_backend="pending",
@@ -83,8 +99,9 @@ class VLMBackend(ABC):
     def _fallback_assessment(error: str) -> QualityAssessment:
         return QualityAssessment(
             status=InspectionStatus.UNCERTAIN,
-            defect_type=DefectType.NONE,
-            freshness_score=None,
+            overall_quality_score=None,
+            quality_metrics={},
+            defects=[],
             explanation=f"VLM response could not be parsed: {error}",
             required_action=RequiredAction.FLAG_FOR_REVIEW,
             vlm_backend="pending",
