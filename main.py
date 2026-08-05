@@ -105,19 +105,36 @@ class FoodInspectionApp:
             label = f"{det.label} {det.confidence:.2f}"
             if q:
                 label += f" | {q.status.value.upper()}"
-                if q.defects:
-                    label += f": {', '.join(q.defects[:2])}"
-                elif q.overall_quality_score is not None:
-                    label += f" (Q: {q.overall_quality_score:.2f})"
+                if q.overall_quality_score is not None:
+                    label += f" (Score: {q.overall_quality_score:.2f})"
             
             # Draw label background
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)
             cv2.rectangle(frame, (x1, y1 - 25), (x1 + tw, y1), color, -1)
             cv2.putText(frame, label, (x1, y1 - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
             
-            # Draw explanation if defect
-            if q and q.status == InspectionStatus.DEFECT and q.explanation:
-                cv2.putText(frame, q.explanation, (x1, y2 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            # Draw structured metrics and defects
+            if q:
+                y_offset = y2 + 20
+                
+                # Show defects if any
+                if q.defects:
+                    defects_text = f"Defects: {', '.join(q.defects)}"
+                    cv2.putText(frame, defects_text, (x1, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+                    y_offset += 20
+                
+                # Show top 3 quality metrics
+                sorted_metrics = sorted(q.quality_metrics.items(), key=lambda x: x[1])[:3]
+                for metric, score in sorted_metrics:
+                    m_text = f"{metric}: {score:.2f}"
+                    # Color metric red if score is low
+                    m_color = (0, 255, 0) if score > 0.7 else (0, 255, 255) if score > 0.4 else (0, 0, 255)
+                    cv2.putText(frame, m_text, (x1, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.4, m_color, 1)
+                    y_offset += 15
+
+                # Draw explanation
+                if q.explanation:
+                    cv2.putText(frame, q.explanation, (x1, y_offset + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
 
         return frame
 
@@ -154,11 +171,17 @@ class FoodInspectionApp:
                 self.log_file.write(json.dumps(payload) + "\n")
                 self.log_file.flush()
 
+                # Capture keyboard input
                 key = cv2.waitKey(1) & 0xFF
-                if key in (ord('q'), 27):
+                
+                # Handle commands (case-insensitive)
+                if key in (ord('q'), ord('Q'), 27):
+                    print("[INFO] Quit requested via keyboard.")
                     break
-                elif key == ord('s'):
+                elif key in (ord('s'), ord('S')):
                     self.save_snapshot(annotated, payload)
+                elif key != 255:
+                    print(f"[DEBUG] Key pressed: {key} ('{chr(key) if key < 128 else '?'}')")
         finally:
             self.cleanup()
 
