@@ -219,10 +219,63 @@ class GPT4oBackend(VLMBackend):
         return response.choices[0].message.content
 
 
+class QwenAPIBackend(VLMBackend):
+    """API-based inference via Qwen-VL (DashScope)."""
+
+    name = "qwen-api"
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "qwen-vl-max"):
+        import os
+
+        from openai import OpenAI
+
+        # Qwen API key can be stored in DASHSCOPE_API_KEY or QWEN_API_KEY
+        api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        if not api_key:
+            raise ValueError("QWEN_API_KEY or DASHSCOPE_API_KEY not found in environment.")
+
+        # DashScope OpenAI-compatible endpoint
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
+        self.model = model
+
+    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
+        import base64
+
+        import cv2
+
+        ok, buf = cv2.imencode(".jpg", crop)
+        if not ok:
+            raise RuntimeError("Failed to encode crop as JPEG")
+        b64_image = base64.b64encode(buf).decode("utf-8")
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=300,
+        )
+        return response.choices[0].message.content
+
+
 def get_backend(name: str) -> VLMBackend:
     """Factory so the pipeline/API can select a backend by string flag."""
     if name == "qwen":
         return Qwen25VLBackend()
+    if name == "qwen-api":
+        return QwenAPIBackend()
     if name in ["gpt4o", "openai"]:
         return GPT4oBackend()
     raise ValueError(f"Unknown VLM backend: {name}")

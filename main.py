@@ -214,19 +214,30 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL_PATH, help="Path to YOLO weights")
     parser.add_argument("--source", default="0", help="Webcam index or video file")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF_THRESHOLD, help="YOLO confidence")
-    parser.add_argument("--vlm", choices=["gpt4o", "openai", "qwen"], help="Enable VLM reasoning backend")
+    parser.add_argument("--vlm", choices=["gpt4o", "openai", "qwen", "qwen-api"], help="Enable VLM reasoning backend")
     parser.add_argument("--vlm-conf", type=float, default=DEFAULT_VLM_CONF_GATE, help="VLM confidence gate")
     
     args = parser.parse_args()
     
     # Auto-detect VLM if not specified
-    api_key = os.getenv("OPENAI_API_KEY")
-    if args.vlm is None and api_key:
-        print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm openai")
-        args.vlm = "openai"
-    elif args.vlm in ["gpt4o", "openai"] and not api_key:
+    openai_key = os.getenv("OPENAI_API_KEY")
+    qwen_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+    
+    if args.vlm is None:
+        if openai_key:
+            print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm openai")
+            args.vlm = "openai"
+        elif qwen_key:
+            print("[INFO] QWEN_API_KEY/DASHSCOPE_API_KEY detected. Defaulting to --vlm qwen-api")
+            args.vlm = "qwen-api"
+            
+    # Validation for requested backends
+    if args.vlm in ["gpt4o", "openai"] and not openai_key:
         print(f"[ERROR] --vlm {args.vlm} requested but OPENAI_API_KEY is not set.")
         print("[TIP] Create a .env file with: OPENAI_API_KEY=your_key_here")
+    elif args.vlm == "qwen-api" and not qwen_key:
+        print(f"[ERROR] --vlm {args.vlm} requested but QWEN_API_KEY or DASHSCOPE_API_KEY is not set.")
+        print("[TIP] Create a .env file with: QWEN_API_KEY=your_key_here")
     
     app = FoodInspectionApp(
         model_path=args.model,
