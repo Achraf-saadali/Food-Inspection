@@ -159,7 +159,11 @@ class GPT4oBackend(VLMBackend):
 
         from openai import OpenAI
 
-        self.client = OpenAI(api_key=api_key or os.environ["OPENAI_API_KEY"])
+        api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not found in environment or arguments.")
+
+        self.client = OpenAI(api_key=api_key)
         self.model = model
 
     def _call_model(self, crop: np.ndarray, prompt: str) -> str:

@@ -92,18 +92,19 @@ class FoodInspectionApp:
             
             # Choose color based on quality
             color = (0, 255, 0)  # Green for OK
-            if q:
-                if q.status == InspectionStatus.DEFECT:
-                    color = (0, 0, 255)  # Red for Defect
-                elif q.status == InspectionStatus.UNCERTAIN:
-                    color = (0, 255, 255)  # Yellow for Uncertain
+            if q.status == InspectionStatus.DEFECT:
+                color = (0, 0, 255)  # Red for Defect
+            elif q.status == InspectionStatus.UNCERTAIN:
+                color = (0, 255, 255)  # Yellow for Uncertain
+            elif q.status == InspectionStatus.SKIPPED:
+                color = (128, 128, 128)  # Gray for Skipped
             
             # Draw box
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             
             # Prepare label
             label = f"{det.label} {det.confidence:.2f}"
-            if q:
+            if q.status != InspectionStatus.SKIPPED:
                 label += f" | {q.status.value.upper()}"
                 if q.overall_quality_score is not None:
                     label += f" (Score: {q.overall_quality_score:.2f})"
@@ -114,7 +115,7 @@ class FoodInspectionApp:
             cv2.putText(frame, label, (x1, y1 - 7), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
             
             # Draw structured metrics and defects
-            if q:
+            if q.status != InspectionStatus.SKIPPED:
                 y_offset = y2 + 20
                 
                 # Show defects if any
