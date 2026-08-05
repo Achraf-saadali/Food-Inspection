@@ -275,7 +275,7 @@ class OpenRouterBackend(VLMBackend):
 
     name = "openrouter"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "google/gemini-flash-1.5-8b"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "google/gemma-3-27b-it"):
         import os
         from openai import OpenAI
 
