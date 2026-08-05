@@ -68,14 +68,17 @@ class VLMBackend(ABC):
             metrics_json_schema=metrics_json_schema
         )
 
+        print(f"[VLM] Analyzing {label} (conf: {confidence:.2f})...")
         start = time.perf_counter()
         try:
             raw = self._call_model(crop, prompt)
             parsed = self._parse_response(raw)
+            print(f"[VLM] Result for {label}: {parsed.status.value.upper()} (Score: {parsed.overall_quality_score})")
         except Exception as exc:  # noqa: BLE001 - VLM failures must degrade gracefully
+            print(f"[VLM] Error analyzing {label}: {exc}")
             parsed = self._fallback_assessment(str(exc))
+        
         latency_ms = (time.perf_counter() - start) * 1000
-
         parsed.vlm_backend = self.name
         parsed.latency_ms = latency_ms
         return parsed
@@ -83,10 +86,27 @@ class VLMBackend(ABC):
     @staticmethod
     def _parse_response(raw: str) -> QualityAssessment:
         # Models sometimes wrap JSON in markdown fences despite instructions.
-        cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        cleaned = raw.strip()
+        if "```json" in cleaned:
+            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+        elif "```" in cleaned:
+            cleaned = cleaned.split("```")[1].split("```")[0].strip()
+        
+        # Find the first '{' and last '}' to handle potential prefix/suffix text
+        start_idx = cleaned.find('{')
+        end_idx = cleaned.rfind('}')
+        if start_idx != -1 and end_idx != -1:
+            cleaned = cleaned[start_idx:end_idx+1]
+
         data = json.loads(cleaned)
+        
+        # Normalize status
+        status_val = data.get("status", "uncertain").lower()
+        if status_val not in [s.value for s in InspectionStatus]:
+            status_val = "uncertain"
+
         return QualityAssessment(
-            status=InspectionStatus(data["status"]),
+            status=InspectionStatus(status_val),
             overall_quality_score=data.get("overall_quality_score"),
             quality_metrics=data.get("quality_metrics", {}),
             defects=data.get("defects", []),
