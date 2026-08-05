@@ -213,6 +213,11 @@ def main():
     
     args = parser.parse_args()
     
+    # Auto-detect VLM if not specified
+    if args.vlm is None and os.getenv("OPENAI_API_KEY"):
+        print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm gpt4o")
+        args.vlm = "gpt4o"
+    
     app = FoodInspectionApp(
         model_path=args.model,
         source=args.source,
