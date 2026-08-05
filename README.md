@@ -122,6 +122,9 @@ python main.py --vlm openai
 # Use Qwen-VL API (DashScope)
 python main.py --vlm qwen-api
 
+# Use OpenRouter (Gemini Flash)
+python main.py --vlm openrouter
+
 # Use Qwen2.5-VL (Local)
 python main.py --vlm qwen
 ```

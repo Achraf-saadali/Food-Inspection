@@ -270,6 +270,53 @@ class QwenAPIBackend(VLMBackend):
         return response.choices[0].message.content
 
 
+class OpenRouterBackend(VLMBackend):
+    """API-based inference via OpenRouter."""
+
+    name = "openrouter"
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "google/gemini-flash-1.5-8b"):
+        import os
+        from openai import OpenAI
+
+        api_key = api_key or os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError("OPENROUTER_API_KEY not found in environment.")
+
+        self.client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+        self.model = model
+
+    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
+        import base64
+        import cv2
+
+        ok, buf = cv2.imencode(".jpg", crop)
+        if not ok:
+            raise RuntimeError("Failed to encode crop as JPEG")
+        b64_image = base64.b64encode(buf).decode("utf-8")
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=300,
+        )
+        return response.choices[0].message.content
+
+
 def get_backend(name: str) -> VLMBackend:
     """Factory so the pipeline/API can select a backend by string flag."""
     if name == "qwen":
@@ -278,4 +325,6 @@ def get_backend(name: str) -> VLMBackend:
         return QwenAPIBackend()
     if name in ["gpt4o", "openai"]:
         return GPT4oBackend()
+    if name == "openrouter":
+        return OpenRouterBackend()
     raise ValueError(f"Unknown VLM backend: {name}")
