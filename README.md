@@ -116,7 +116,11 @@ cp .env.example .env
 #### Option A: Live Webcam Interface
 Launches a real-time window showing detections and quality reasoning.
 ```bash
-python main.py --vlm gpt4o --conf 0.4
+# Use OpenAI (GPT-4o)
+python main.py --vlm openai
+
+# Use Qwen2.5-VL (Local)
+python main.py --vlm qwen
 ```
 *   `s`: Save a snapshot (Image + JSON Report).
 *   `q`: Quit.
