@@ -20,8 +20,12 @@ from typing import Optional
 
 import numpy as np
 
+from dotenv import load_dotenv
 from quality_profiles import get_quality_metrics
 from schemas import InspectionStatus, QualityAssessment, RequiredAction
+
+# Ensure environment variables are loaded
+load_dotenv()
 
 QUALITY_PROMPT_TEMPLATE = """You are inspecting a food item detected by an object \
 detector as "{label}" (detector confidence: {confidence:.2f}).

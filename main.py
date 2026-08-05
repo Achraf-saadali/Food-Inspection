@@ -20,7 +20,13 @@ from schemas import InspectionStatus
 DEFAULT_MODEL_PATH = "models/best.pt"
 DEFAULT_CONF_THRESHOLD = 0.4
 DEFAULT_IOU_THRESHOLD = 0.5
-load_dotenv()
+# Load environment variables from .env file
+env_path = Path(".") / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    # Also try loading from the current environment if .env is missing
+    load_dotenv()
 
 DEFAULT_VLM_CONF_GATE = 0.6  # Only run VLM on high-confidence detections
 
@@ -214,9 +220,13 @@ def main():
     args = parser.parse_args()
     
     # Auto-detect VLM if not specified
-    if args.vlm is None and os.getenv("OPENAI_API_KEY"):
+    api_key = os.getenv("OPENAI_API_KEY")
+    if args.vlm is None and api_key:
         print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm gpt4o")
         args.vlm = "gpt4o"
+    elif args.vlm == "gpt4o" and not api_key:
+        print("[ERROR] --vlm gpt4o requested but OPENAI_API_KEY is not set.")
+        print("[TIP] Create a .env file with: OPENAI_API_KEY=your_key_here")
     
     app = FoodInspectionApp(
         model_path=args.model,
