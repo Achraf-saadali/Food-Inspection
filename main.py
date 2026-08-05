@@ -105,8 +105,10 @@ class FoodInspectionApp:
             label = f"{det.label} {det.confidence:.2f}"
             if q:
                 label += f" | {q.status.value.upper()}"
-                if q.defect_type != "none":
-                    label += f": {q.defect_type.value}"
+                if q.defects:
+                    label += f": {', '.join(q.defects[:2])}"
+                elif q.overall_quality_score is not None:
+                    label += f" (Q: {q.overall_quality_score:.2f})"
             
             # Draw label background
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1)

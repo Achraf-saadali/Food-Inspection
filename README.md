@@ -390,24 +390,17 @@ The VLM receives:
 3. The YOLO confidence score
 4. A quality-inspection prompt
 
-Prompt used in the current implementation:
-
-```text
-Inspect this food item for visible quality defects.
-
-Determine whether the item shows:
-- signs of mold
+The VLM prompt is dynamically generated based on the detected ingredient class. For example, for a **Banana**, the VLM is asked to evaluate:
+- ripeness
+- browning
 - bruising
-- discoloration
-- freshness problems
-- other visible abnormalities
+- black_spots
+- mold
+- peel_damage
+- shriveling
+- freshness
 
-Return:
-- status
-- defect type
-- explanation
-- required action
-```
+The resulting JSON follows a structured, extensible schema defined in [QUALITY_ASSESSMENT.md](QUALITY_ASSESSMENT.md).
 
 ### Implementation notes
 
