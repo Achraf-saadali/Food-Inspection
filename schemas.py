@@ -19,6 +19,7 @@ class InspectionStatus(str, Enum):
     OK = "ok"
     DEFECT = "defect"
     UNCERTAIN = "uncertain"
+    SKIPPED = "skipped"
 
 
 class DefectType(str, Enum):
@@ -66,10 +67,10 @@ class QualityAssessment(BaseModel):
 
 
 class InspectionItem(BaseModel):
-    """One detected object plus its (optional) quality assessment."""
+    """One detected object plus its quality assessment."""
 
     detection: Detection
-    quality: Optional[QualityAssessment] = None
+    quality: QualityAssessment
 
 
 class InspectionResult(BaseModel):

@@ -14,7 +14,15 @@ from typing import List, Optional
 
 import numpy as np
 
-from schemas import Detection, ImageSize, InspectionItem, InspectionResult
+from schemas import (
+    Detection,
+    ImageSize,
+    InspectionItem,
+    InspectionResult,
+    InspectionStatus,
+    QualityAssessment,
+    RequiredAction,
+)
 from vlm_reasoning import VLMBackend
 
 
@@ -70,6 +78,18 @@ def run_inspection(
             crop = crop_detection(image, bbox_xyxy)
             if crop.size > 0:
                 quality = vlm_backend.analyze(crop, label, confidence)
+        
+        # Fallback to a "skipped" assessment if VLM didn't run
+        if quality is None:
+            quality = QualityAssessment(
+                status=InspectionStatus.SKIPPED,
+                overall_quality_score=None,
+                quality_metrics={},
+                defects=[],
+                explanation="VLM reasoning skipped (low confidence or VLM disabled).",
+                required_action=RequiredAction.NONE,
+                vlm_backend=vlm_backend.name if vlm_backend else "none",
+            )
 
         items.append(InspectionItem(detection=detection, quality=quality))
 
