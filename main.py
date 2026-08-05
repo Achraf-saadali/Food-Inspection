@@ -42,7 +42,7 @@ WINDOW_NAME = "Food Inspection - Live Quality Analysis"
 
 class FoodInspectionApp:
     def __init__(self, model_path, source=0, conf=0.4, iou=0.5, 
-                 vlm_backend_name=None, vlm_conf_gate=0.6):
+                 vlm_backend_name=None, vlm_conf_gate=0.6, vlm_model=None):
         self.model_path = Path(model_path)
         if not self.model_path.exists():
             raise FileNotFoundError(f"Model weights not found at: {self.model_path}")
@@ -52,9 +52,12 @@ class FoodInspectionApp:
         
         self.vlm_backend = None
         if vlm_backend_name:
-            print(f"[INFO] Initializing VLM backend: {vlm_backend_name} ...")
+            msg = f"[INFO] Initializing VLM backend: {vlm_backend_name}"
+            if vlm_model:
+                msg += f" (model: {vlm_model})"
+            print(f"{msg} ...")
             try:
-                self.vlm_backend = get_backend(vlm_backend_name)
+                self.vlm_backend = get_backend(vlm_backend_name, model=vlm_model)
             except Exception as e:
                 print(f"[ERROR] Failed to load VLM backend: {e}")
                 print("[WARN] Proceeding with detection only.")
@@ -215,6 +218,7 @@ def main():
     parser.add_argument("--source", default="0", help="Webcam index or video file")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF_THRESHOLD, help="YOLO confidence")
     parser.add_argument("--vlm", choices=["gpt4o", "openai", "qwen", "qwen-api", "openrouter"], help="Enable VLM reasoning backend")
+    parser.add_argument("--vlm-model", help="Specific model ID to use with the VLM backend")
     parser.add_argument("--vlm-conf", type=float, default=DEFAULT_VLM_CONF_GATE, help="VLM confidence gate")
     
     args = parser.parse_args()
@@ -251,7 +255,8 @@ def main():
         source=args.source,
         conf=args.conf,
         vlm_backend_name=args.vlm,
-        vlm_conf_gate=args.vlm_conf
+        vlm_conf_gate=args.vlm_conf,
+        vlm_model=args.vlm_model
     )
     app.run()
 

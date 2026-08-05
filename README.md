@@ -122,8 +122,14 @@ python main.py --vlm openai
 # Use Qwen-VL API (DashScope)
 python main.py --vlm qwen-api
 
-# Use OpenRouter (Gemini Flash)
+# Use OpenRouter (Gemini Flash - Default)
 python main.py --vlm openrouter
+
+# Use OpenRouter with a specific model (e.g. Claude 3.5 Sonnet)
+python main.py --vlm openrouter --vlm-model anthropic/claude-3.5-sonnet
+
+# Use Qwen-VL API with a specific model
+python main.py --vlm qwen-api --vlm-model qwen-vl-plus
 
 # Use Qwen2.5-VL (Local)
 python main.py --vlm qwen
