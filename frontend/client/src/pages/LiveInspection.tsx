@@ -17,8 +17,6 @@ import { formatTimestamp } from '../utils/inspection';
 import type { InspectionStatus } from '../types/inspection';
 
 type Mode = 'detect' | 'inspect';
-type VlmBackend = 'qwen-api' | 'gpt4o' | 'openrouter';
-
 // ─── Stage progress indicator ─────────────────────────────────────────────────
 
 const DETECT_STAGES: InspectionStage[] = ['Uploading image...', 'YOLO detecting...', 'Complete'];
@@ -76,7 +74,6 @@ export default function LiveInspection() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const [mode, setMode] = useState<Mode>('inspect');
-  const [vlmBackend, setVlmBackend] = useState<VlmBackend>('qwen-api');
   const [isDragging, setIsDragging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,9 +85,9 @@ export default function LiveInspection() {
       const url = URL.createObjectURL(file);
       setImageUrl(url);
       reset();
-      await run(file, mode, mode === 'inspect' ? vlmBackend : undefined);
+      await run(file, mode);
     },
-    [mode, vlmBackend, run, reset]
+    [mode, run, reset]
   );
 
   const handleDrop = useCallback(
@@ -170,15 +167,9 @@ export default function LiveInspection() {
             {mode === 'inspect' && (
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block">VLM Backend</label>
-                <select
-                  value={vlmBackend}
-                  onChange={(e) => setVlmBackend(e.target.value as VlmBackend)}
-                  className="w-full py-2 px-3 rounded border border-border bg-secondary text-xs font-mono text-foreground"
-                >
-                  <option value="qwen-api">Qwen-VL (DashScope)</option>
-                  <option value="gpt4o">GPT-4o (OpenAI)</option>
-                  <option value="openrouter">Gemini Flash (OpenRouter)</option>
-                </select>
+                <div className="w-full py-2 px-3 rounded border border-border bg-secondary/50 text-xs font-mono text-muted-foreground">
+                  OpenRouter (Gemini Flash)
+                </div>
               </div>
             )}
           </div>
@@ -334,7 +325,7 @@ export default function LiveInspection() {
               {/* Mode indicator */}
               <div className="flex items-center gap-2 pt-1 border-t border-border">
                 {mode === 'inspect' ? (
-                  <><Shield className="w-3.5 h-3.5 text-primary" /><span className="text-xs font-mono text-muted-foreground">YOLO + VLM · {vlmBackend}</span></>
+                  <><Shield className="w-3.5 h-3.5 text-primary" /><span className="text-xs font-mono text-muted-foreground">YOLO + VLM · OpenRouter</span></>
                 ) : (
                   <><Zap className="w-3.5 h-3.5 text-primary" /><span className="text-xs font-mono text-muted-foreground">YOLO Detection Only</span></>
                 )}

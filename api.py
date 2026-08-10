@@ -33,7 +33,7 @@ from vlm_reasoning import get_backend
 
 load_dotenv()
 
-app = FastAPI(title="Food Inspection API", version="0.3.0")
+app = FastAPI(title="Food Inspection API", version="0.4.0")
 
 # Allow the Vite dev server (port 3000) and any production frontend to call the API
 app.add_middleware(
@@ -122,10 +122,11 @@ def process_inspection_job(job_id: str, image: np.ndarray, filename: str, vlm_ba
 async def inspect(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    vlm_backend: str = Query(default="qwen", description="qwen | gpt4o"),
     confidence_gate: float = Query(default=0.4, ge=0.0, le=1.0),
 ):
-    """Async Detection + VLM reasoning endpoint. Returns a job_id."""
+    """Async Detection + VLM reasoning endpoint. Returns a job_id.
+    Note: The VLM backend is now hardcoded to OpenRouter in vlm_reasoning.py.
+    """
     image = _decode_upload(await file.read())
     
     job_id = str(uuid.uuid4())
@@ -136,7 +137,7 @@ async def inspect(
         job_id=job_id,
         image=image,
         filename=file.filename,
-        vlm_backend_name=vlm_backend,
+        vlm_backend_name="openrouter",
         confidence_gate=confidence_gate
     )
     

@@ -318,19 +318,13 @@ class OpenRouterBackend(VLMBackend):
 
 
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
-    """Factory so the pipeline/API can select a backend by string flag."""
+    """Factory so the pipeline/API can select a backend by string flag.
+    
+    HARDCODED: This system is now restricted to use ONLY the OpenRouter API.
+    All requests, regardless of the 'name' parameter, will route to OpenRouter.
+    """
     kwargs = {}
     if model:
         kwargs["model"] = model
-
-    if name == "qwen":
-        if model:
-            return Qwen25VLBackend(model_id=model)
-        return Qwen25VLBackend()
-    if name == "qwen-api":
-        return QwenAPIBackend(**kwargs)
-    if name in ["gpt4o", "openai"]:
-        return GPT4oBackend(**kwargs)
-    if name == "openrouter":
-        return OpenRouterBackend(**kwargs)
-    raise ValueError(f"Unknown VLM backend: {name}")
+    
+    return OpenRouterBackend(**kwargs)

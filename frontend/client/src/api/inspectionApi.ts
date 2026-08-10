@@ -36,14 +36,12 @@ export async function detectImage(file: File): Promise<InspectionResult> {
 export async function submitInspectJob(
   file: File,
   options?: {
-    vlm_backend?: 'qwen' | 'qwen-api' | 'gpt4o' | 'openai' | 'openrouter';
     confidence_gate?: number;
   }
 ): Promise<{ job_id: string; status: string }> {
   const form = new FormData();
   form.append('file', file);
   const params = new URLSearchParams();
-  if (options?.vlm_backend) params.set('vlm_backend', options.vlm_backend);
   if (options?.confidence_gate !== undefined)
     params.set('confidence_gate', String(options.confidence_gate));
   const { data } = await apiClient.post<{ job_id: string; status: string }>(
@@ -74,7 +72,6 @@ export async function pollInspectStatus(jobId: string): Promise<{
 export async function inspectImage(
   file: File,
   options?: {
-    vlm_backend?: 'qwen' | 'qwen-api' | 'gpt4o' | 'openai' | 'openrouter';
     confidence_gate?: number;
   },
   onProgress?: (stage: string) => void

@@ -28,7 +28,7 @@ interface UseInspectionReturn {
   isLoading: boolean;
   stage: InspectionStage;
   error: string | null;
-  run: (file: File, mode?: InspectionMode, vlmBackend?: string) => Promise<void>;
+  run: (file: File, mode?: InspectionMode) => Promise<void>;
   reset: () => void;
 }
 
@@ -39,7 +39,7 @@ export function useInspection(): UseInspectionReturn {
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(
-    async (file: File, mode: InspectionMode = 'inspect', vlmBackend?: string) => {
+    async (file: File, mode: InspectionMode = 'inspect') => {
       setIsLoading(true);
       setStage('Uploading image...');
       setError(null);
@@ -52,7 +52,6 @@ export function useInspection(): UseInspectionReturn {
           const res = await inspectImage(
             file,
             {
-              vlm_backend: vlmBackend as any,
               confidence_gate: 0.4,
             },
             (progressStage) => {
