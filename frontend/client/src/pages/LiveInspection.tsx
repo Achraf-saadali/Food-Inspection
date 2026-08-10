@@ -1,12 +1,15 @@
 /**
  * Live Inspection page — image upload, inference, bounding box overlay, results.
  * Design: Industrial Precision — scan-line animation, status-coded results
+ *
+ * Updated to show per-stage progress (Uploading → YOLO → VLM → Complete)
+ * and to handle the new async job-based /inspect endpoint.
  */
 
 import { useRef, useState, useCallback } from 'react';
-import { Upload, ScanLine, X, Zap, Shield, AlertTriangle, Settings2 } from 'lucide-react';
+import { Upload, ScanLine, X, Zap, Shield, AlertTriangle, Settings2, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useInspection } from '../hooks/useInspection';
+import { useInspection, type InspectionStage } from '../hooks/useInspection';
 import { DetectionCard } from '../components/inspection/DetectionCard';
 import { BoundingBoxOverlay } from '../components/inspection/BoundingBoxOverlay';
 import { StatusBadge } from '../components/inspection/StatusBadge';
@@ -16,8 +19,60 @@ import type { InspectionStatus } from '../types/inspection';
 type Mode = 'detect' | 'inspect';
 type VlmBackend = 'qwen-api' | 'gpt4o' | 'openrouter';
 
+// ─── Stage progress indicator ─────────────────────────────────────────────────
+
+const DETECT_STAGES: InspectionStage[] = ['Uploading image...', 'YOLO detecting...', 'Complete'];
+const INSPECT_STAGES: InspectionStage[] = [
+  'Uploading image...',
+  'YOLO detecting...',
+  'Analyzing with VLM...',
+  'Complete',
+];
+
+function StageProgressBar({ stage, mode }: { stage: InspectionStage; mode: Mode }) {
+  const stages = mode === 'detect' ? DETECT_STAGES : INSPECT_STAGES;
+  const currentIdx = stage ? stages.indexOf(stage) : -1;
+
+  return (
+    <div className="flex items-center gap-2 w-full">
+      {stages.map((s, idx) => {
+        const isDone = currentIdx > idx;
+        const isActive = currentIdx === idx;
+        return (
+          <div key={s} className="flex-1 flex flex-col items-center gap-1">
+            <div
+              className={cn(
+                'w-full h-1 rounded-full transition-all duration-500',
+                isDone
+                  ? 'bg-primary'
+                  : isActive
+                  ? 'bg-primary/60 animate-pulse'
+                  : 'bg-border'
+              )}
+            />
+            <span
+              className={cn(
+                'text-[10px] font-mono text-center leading-tight',
+                isDone
+                  ? 'text-primary'
+                  : isActive
+                  ? 'text-primary/80'
+                  : 'text-muted-foreground/50'
+              )}
+            >
+              {s}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
 export default function LiveInspection() {
-  const { result, isLoading, error, run, reset } = useInspection();
+  const { result, isLoading, stage, error, run, reset } = useInspection();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const [mode, setMode] = useState<Mode>('inspect');
@@ -63,6 +118,9 @@ export default function LiveInspection() {
     : result.items.length === 0
     ? 'skipped'
     : 'ok';
+
+  // Derive a short status label for the loading button
+  const loadingLabel = stage && stage !== 'Complete' ? stage : 'Processing...';
 
   return (
     <div className="page-enter p-6 space-y-6">
@@ -195,6 +253,13 @@ export default function LiveInspection() {
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
 
+          {/* Stage progress bar — shown while loading */}
+          {isLoading && stage && (
+            <div className="rounded border border-border bg-card p-3">
+              <StageProgressBar stage={stage} mode={mode} />
+            </div>
+          )}
+
           {/* Run button */}
           {imageUrl && (
             <button
@@ -204,8 +269,13 @@ export default function LiveInspection() {
             >
               {isLoading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  Running {mode === 'detect' ? 'YOLO Detection' : 'Full Pipeline'}...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {loadingLabel}
+                </>
+              ) : stage === 'Complete' ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  Upload New Image
                 </>
               ) : (
                 <>
@@ -223,10 +293,12 @@ export default function LiveInspection() {
               <div>
                 <p className="text-sm font-semibold text-[#ef4444]">Inspection Failed</p>
                 <p className="text-xs text-muted-foreground mt-1 font-mono">{error}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ensure the FastAPI backend is running at{' '}
-                  <code className="font-mono text-primary">http://localhost:8000</code>
-                </p>
+                {error.includes('connect') && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ensure the FastAPI backend is running at{' '}
+                    <code className="font-mono text-primary">http://localhost:8000</code>
+                  </p>
+                )}
               </div>
             </div>
           )}
@@ -272,8 +344,19 @@ export default function LiveInspection() {
             <div className="rounded border border-border bg-card p-6 text-center">
               <ScanLine className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">
-                {isLoading ? 'Analyzing image...' : 'Upload an image to begin inspection'}
+                {isLoading
+                  ? stage || 'Analyzing image...'
+                  : 'Upload an image to begin inspection'}
               </p>
+              {isLoading && stage && (
+                <p className="text-xs text-muted-foreground/60 mt-1 font-mono">
+                  {stage === 'Analyzing with VLM...'
+                    ? 'VLM reasoning may take 5–15 seconds per detection...'
+                    : stage === 'YOLO detecting...'
+                    ? 'Running YOLO object detection...'
+                    : ''}
+                </p>
+              )}
             </div>
           )}
 

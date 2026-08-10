@@ -49,8 +49,13 @@ def run_inspection(
     >= this value. Set to 0.0 to run the VLM on every detection; raise it to
     save VLM calls on low-confidence detections that are likely noise anyway.
     """
+    import time
     h, w = image.shape[:2]
+    
+    yolo_start = time.perf_counter()
     yolo_results = yolo_model(image)[0]  # Ultralytics-style single-image result
+    yolo_time = time.perf_counter() - yolo_start
+    print(f"[Pipeline] YOLO inference finished: {yolo_time:.3f} seconds")
 
     items: List[InspectionItem] = []
     for box in yolo_results.boxes:

@@ -2,9 +2,10 @@
  * Inspection API service.
  *
  * Wraps all FastAPI endpoints from api.py:
- *   POST /detect   — YOLO detection only
- *   POST /inspect  — YOLO + VLM quality reasoning
- *   GET  /health   — health check
+ *   POST /detect                    — YOLO detection only (synchronous)
+ *   POST /inspect                   — Async YOLO + VLM: returns { job_id }
+ *   GET  /inspect/status/{job_id}   — Poll for job result
+ *   GET  /health                    — health check
  *
  * Placeholder endpoints (to be implemented in backend):
  *   GET  /api/history — inspection history log
@@ -17,7 +18,7 @@ import apiClient from './client';
 
 /**
  * POST /detect
- * Fast detection-only endpoint. No VLM call.
+ * Fast detection-only endpoint. No VLM call. Fully synchronous.
  */
 export async function detectImage(file: File): Promise<InspectionResult> {
   const form = new FormData();
@@ -30,27 +31,80 @@ export async function detectImage(file: File): Promise<InspectionResult> {
 
 /**
  * POST /inspect
- * Full pipeline: YOLO detection + VLM quality reasoning.
+ * Async pipeline: submits job, returns job_id immediately.
  */
-export async function inspectImage(
+export async function submitInspectJob(
   file: File,
   options?: {
     vlm_backend?: 'qwen' | 'qwen-api' | 'gpt4o' | 'openai' | 'openrouter';
     confidence_gate?: number;
   }
-): Promise<InspectionResult> {
+): Promise<{ job_id: string; status: string }> {
   const form = new FormData();
   form.append('file', file);
   const params = new URLSearchParams();
   if (options?.vlm_backend) params.set('vlm_backend', options.vlm_backend);
   if (options?.confidence_gate !== undefined)
     params.set('confidence_gate', String(options.confidence_gate));
-  const { data } = await apiClient.post<InspectionResult>(
+  const { data } = await apiClient.post<{ job_id: string; status: string }>(
     `/inspect?${params.toString()}`,
     form,
     { headers: { 'Content-Type': 'multipart/form-data' } }
   );
   return data;
+}
+
+/**
+ * GET /inspect/status/{job_id}
+ * Poll for the status of an async inspection job.
+ */
+export async function pollInspectStatus(jobId: string): Promise<{
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  result?: InspectionResult;
+  error?: string;
+}> {
+  const { data } = await apiClient.get(`/inspect/status/${jobId}`);
+  return data;
+}
+
+/**
+ * Full async inspect flow: submit job, poll until complete.
+ * Calls onProgress with the current status string for UI feedback.
+ */
+export async function inspectImage(
+  file: File,
+  options?: {
+    vlm_backend?: 'qwen' | 'qwen-api' | 'gpt4o' | 'openai' | 'openrouter';
+    confidence_gate?: number;
+  },
+  onProgress?: (stage: string) => void
+): Promise<InspectionResult> {
+  onProgress?.('Uploading image...');
+  const { job_id } = await submitInspectJob(file, options);
+
+  onProgress?.('YOLO detecting...');
+
+  const POLL_INTERVAL_MS = 1000;
+  const MAX_WAIT_MS = 120_000; // 2 minutes max
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < MAX_WAIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    const statusResponse = await pollInspectStatus(job_id);
+
+    if (statusResponse.status === 'processing') {
+      onProgress?.('Analyzing with VLM...');
+    } else if (statusResponse.status === 'completed') {
+      onProgress?.('Complete');
+      if (!statusResponse.result) throw new Error('Job completed but no result returned');
+      return statusResponse.result;
+    } else if (statusResponse.status === 'failed') {
+      throw new Error(statusResponse.error || 'Inspection job failed on the server');
+    }
+    // else still 'pending' — keep polling
+  }
+
+  throw new Error('Inspection timed out after 2 minutes. The server may be overloaded.');
 }
 
 /**
@@ -232,4 +286,3 @@ function getMockStats(): InspectionStats {
     top_classes: topClasses,
   };
 }
-

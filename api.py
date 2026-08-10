@@ -15,12 +15,16 @@ from __future__ import annotations
 
 import os
 import io
+import uuid
+import asyncio
+from typing import Dict, Any
 from functools import lru_cache
 from dotenv import load_dotenv
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
 from inspection_pipeline import run_inspection
@@ -29,10 +33,23 @@ from vlm_reasoning import get_backend
 
 load_dotenv()
 
-app = FastAPI(title="Food Inspection API", version="0.2.0")
+app = FastAPI(title="Food Inspection API", version="0.3.0")
+
+# Allow the Vite dev server (port 3000) and any production frontend to call the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Restrict to specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 MODEL_PATH = "models/best.pt"
 _frame_counter = 0
+
+# In-memory job store for async inspection
+# Format: { "job_id": {"status": "pending"|"processing"|"completed"|"failed", "result": InspectionResult|None, "error": str|None} }
+_jobs: Dict[str, Dict[str, Any]] = {}
 
 
 @lru_cache(maxsize=1)
@@ -68,25 +85,76 @@ async def detect(file: UploadFile = File(...)) -> InspectionResult:
     )
 
 
-@app.post("/inspect", response_model=InspectionResult)
+def process_inspection_job(job_id: str, image: np.ndarray, filename: str, vlm_backend_name: str, confidence_gate: float):
+    global _frame_counter
+    import time
+    
+    _jobs[job_id]["status"] = "processing"
+    
+    try:
+        start_time = time.perf_counter()
+        _frame_counter += 1
+        backend = get_vlm_backend(vlm_backend_name)
+        
+        print(f"[API] Processing job {job_id} for {filename} (Frame {_frame_counter})")
+        
+        result = run_inspection(
+            image=image,
+            yolo_model=get_yolo_model(),
+            frame_id=_frame_counter,
+            source=filename or "upload",
+            vlm_backend=backend,
+            vlm_confidence_gate=confidence_gate,
+        )
+        
+        total_time = time.perf_counter() - start_time
+        print(f"[API] Job {job_id} complete. Total time: {total_time:.3f}s")
+        
+        _jobs[job_id]["status"] = "completed"
+        _jobs[job_id]["result"] = result
+    except Exception as e:
+        print(f"[API] Job {job_id} failed: {e}")
+        _jobs[job_id]["status"] = "failed"
+        _jobs[job_id]["error"] = str(e)
+
+
+@app.post("/inspect")
 async def inspect(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     vlm_backend: str = Query(default="qwen", description="qwen | gpt4o"),
     confidence_gate: float = Query(default=0.4, ge=0.0, le=1.0),
-) -> InspectionResult:
-    """Detection + VLM reasoning endpoint. Returns the unified inspection JSON."""
-    global _frame_counter
+):
+    """Async Detection + VLM reasoning endpoint. Returns a job_id."""
     image = _decode_upload(await file.read())
-    _frame_counter += 1
-    backend = get_vlm_backend(vlm_backend)
-    return run_inspection(
+    
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {"status": "pending", "result": None, "error": None}
+    
+    background_tasks.add_task(
+        process_inspection_job,
+        job_id=job_id,
         image=image,
-        yolo_model=get_yolo_model(),
-        frame_id=_frame_counter,
-        source=file.filename or "upload",
-        vlm_backend=backend,
-        vlm_confidence_gate=confidence_gate,
+        filename=file.filename,
+        vlm_backend_name=vlm_backend,
+        confidence_gate=confidence_gate
     )
+    
+    return {"job_id": job_id, "status": "pending"}
+
+
+@app.get("/inspect/status/{job_id}")
+async def get_inspection_status(job_id: str):
+    if job_id not in _jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = _jobs[job_id]
+    if job["status"] == "completed":
+        return {"status": "completed", "result": job["result"]}
+    elif job["status"] == "failed":
+        return {"status": "failed", "error": job["error"]}
+    else:
+        return {"status": job["status"]}
 
 
 @app.get("/health")
