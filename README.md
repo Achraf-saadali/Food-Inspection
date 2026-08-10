@@ -122,8 +122,14 @@ python main.py --vlm openai
 # Use Qwen-VL API (DashScope)
 python main.py --vlm qwen-api
 
-# Use OpenRouter (Gemini Flash)
+# Use OpenRouter (Gemini Flash - Default)
 python main.py --vlm openrouter
+
+# Use OpenRouter with a specific model (e.g. Claude 3.5 Sonnet)
+python main.py --vlm openrouter --vlm-model anthropic/claude-3.5-sonnet
+
+# Use Qwen-VL API with a specific model
+python main.py --vlm qwen-api --vlm-model qwen-vl-plus
 
 # Use Qwen2.5-VL (Local)
 python main.py --vlm qwen
@@ -131,38 +137,21 @@ python main.py --vlm qwen
 *   `s`: Save a snapshot (Image + JSON Report).
 *   `q`: Quit.
 
-This diagram now corresponds to stages 4–7 of the full system architecture
-presented at the beginning of this document (detection, cropping, VLM
-reasoning, and merged result) — implemented via `inspection_pipeline.py` and
-served over HTTP via `api.py`. Acquisition and alerting remain as described
-there.
-
----
-
-
-
-```text
-Camera
-   ↓
-YOLO                     ✅
-   ↓
-Object Detection         ✅
-   ↓
-Object Crop              ✅
-   ↓
-VLM                      ✅
-   ↓
-Quality Reasoning        ✅
-   ↓
-Structured JSON          ✅
-   ↓
-Database / Dashboard / Alerts   🔄
+#### Option B: FastAPI Server
+Exposes the pipeline as a REST API for integration with dashboards or external services.
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
 ```
+*   `POST /detect`: YOLO detection only.
+*   `POST /inspect`: Full YOLO + VLM quality reasoning.
 
 ---
 
-
-
----
-
-
+## 5. Repository Structure
+*   `main.py`: Entry point for live inspection.
+*   `api.py`: FastAPI implementation.
+*   `vlm_reasoning.py`: Multi-backend VLM interface.
+*   `quality_profiles.py`: Ingredient-specific metric definitions.
+*   `schemas.py`: Pydantic models for data consistency.
+*   `models/best.pt`: Fine-tuned YOLOv9c weights.
+*   `trainning_runs/train4/`: Training logs, curves, and metrics.
