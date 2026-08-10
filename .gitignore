@@ -6,4 +6,7 @@ outputs/
 .env
 .vscode/
 .idea/
+<<<<<<< HEAD
 frontend/node_modules/**
+=======
+>>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
