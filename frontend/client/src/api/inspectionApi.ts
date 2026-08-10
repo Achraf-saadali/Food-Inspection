@@ -2,16 +2,10 @@
  * Inspection API service.
  *
  * Wraps all FastAPI endpoints from api.py:
-<<<<<<< HEAD
- *   POST /detect   — YOLO detection only
- *   POST /inspect  — YOLO + VLM quality reasoning
- *   GET  /health   — health check
-=======
  *   POST /detect                    — YOLO detection only (synchronous)
  *   POST /inspect                   — Async YOLO + VLM: returns { job_id }
  *   GET  /inspect/status/{job_id}   — Poll for job result
  *   GET  /health                    — health check
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
  *
  * Placeholder endpoints (to be implemented in backend):
  *   GET  /api/history — inspection history log
@@ -24,11 +18,7 @@ import apiClient from './client';
 
 /**
  * POST /detect
-<<<<<<< HEAD
- * Fast detection-only endpoint. No VLM call.
-=======
  * Fast detection-only endpoint. No VLM call. Fully synchronous.
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
  */
 export async function detectImage(file: File): Promise<InspectionResult> {
   const form = new FormData();
@@ -41,36 +31,23 @@ export async function detectImage(file: File): Promise<InspectionResult> {
 
 /**
  * POST /inspect
-<<<<<<< HEAD
- * Full pipeline: YOLO detection + VLM quality reasoning.
- */
-export async function inspectImage(
-=======
  * Async pipeline: submits job, returns job_id immediately.
  */
 export async function submitInspectJob(
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   file: File,
   options?: {
     vlm_backend?: 'qwen' | 'qwen-api' | 'gpt4o' | 'openai' | 'openrouter';
     confidence_gate?: number;
   }
-<<<<<<< HEAD
-): Promise<InspectionResult> {
-=======
 ): Promise<{ job_id: string; status: string }> {
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   const form = new FormData();
   form.append('file', file);
   const params = new URLSearchParams();
   if (options?.vlm_backend) params.set('vlm_backend', options.vlm_backend);
   if (options?.confidence_gate !== undefined)
     params.set('confidence_gate', String(options.confidence_gate));
-<<<<<<< HEAD
-  const { data } = await apiClient.post<InspectionResult>(
-=======
+  
   const { data } = await apiClient.post<{ job_id: string; status: string }>(
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
     `/inspect?${params.toString()}`,
     form,
     { headers: { 'Content-Type': 'multipart/form-data' } }
@@ -79,8 +56,6 @@ export async function submitInspectJob(
 }
 
 /**
-<<<<<<< HEAD
-=======
  * GET /inspect/status/{job_id}
  * Poll for the status of an async inspection job.
  */
@@ -134,7 +109,6 @@ export async function inspectImage(
 }
 
 /**
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
  * GET /health
  * Backend health check.
  */
@@ -159,10 +133,6 @@ export async function checkHealth(): Promise<HealthStatus> {
  * GET /api/history
  * PLACEHOLDER — Backend endpoint not yet implemented.
  * Returns mock data for frontend development.
- *
- * TODO: Implement in FastAPI:
- *   @app.get("/api/history", response_model=List[InspectionResult])
- *   async def get_history(limit: int = 50, offset: int = 0): ...
  */
 export async function getInspectionHistory(
   _limit = 50,
@@ -175,10 +145,6 @@ export async function getInspectionHistory(
 /**
  * GET /api/stats
  * PLACEHOLDER — Backend endpoint not yet implemented.
- *
- * TODO: Implement in FastAPI:
- *   @app.get("/api/stats", response_model=InspectionStats)
- *   async def get_stats(): ...
  */
 export async function getInspectionStats(): Promise<InspectionStats> {
   return getMockStats();
@@ -187,10 +153,6 @@ export async function getInspectionStats(): Promise<InspectionStats> {
 /**
  * GET /api/model
  * PLACEHOLDER — Backend endpoint not yet implemented.
- *
- * TODO: Implement in FastAPI:
- *   @app.get("/api/model", response_model=ModelInfo)
- *   async def get_model_info(): ...
  */
 export async function getModelInfo(): Promise<ModelInfo> {
   return {
@@ -313,7 +275,3 @@ function getMockStats(): InspectionStats {
     top_classes: topClasses,
   };
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d

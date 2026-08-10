@@ -56,11 +56,14 @@ def run_inspection(
     yolo_results = yolo_model(image)[0]  # Ultralytics-style single-image result
     yolo_time = time.perf_counter() - yolo_start
     print(f"[Pipeline] YOLO inference finished: {yolo_time:.3f} seconds")
+    print(f"[Pipeline] Found {len(yolo_results.boxes)} detections")
 
     items: List[InspectionItem] = []
-    for box in yolo_results.boxes:
+    for i, box in enumerate(yolo_results.boxes):
         class_id = int(box.cls[0])
         confidence = float(box.conf[0])
+        label = yolo_model.names[class_id]
+        print(f"  - Detection {i+1}: {label} (confidence: {confidence:.2f})")
         bbox_xyxy = box.xyxy[0].tolist()
         bbox_normalized = [
             bbox_xyxy[0] / w,
@@ -80,9 +83,12 @@ def run_inspection(
 
         quality = None
         if vlm_backend is not None and confidence >= vlm_confidence_gate:
+            print(f"    -> Running VLM reasoning for {label}...")
             crop = crop_detection(image, bbox_xyxy)
             if crop.size > 0:
                 quality = vlm_backend.analyze(crop, label, confidence)
+        elif vlm_backend is not None:
+            print(f"    -> Skipping VLM reasoning for {label} (confidence {confidence:.2f} < gate {vlm_confidence_gate})")
         
         # Fallback to a "skipped" assessment if VLM didn't run
         if quality is None:

@@ -73,11 +73,21 @@ class VLMBackend(ABC):
         )
 
         print(f"[VLM] Analyzing {label} (conf: {confidence:.2f})...")
+        print("-" * 40)
+        print(f"[VLM Input Prompt]:\n{prompt}")
+        print("-" * 40)
         start = time.perf_counter()
         try:
             raw = self._call_model(crop, prompt)
+            print(f"[VLM Raw Output]:\n{raw}")
+            print("-" * 40)
             parsed = self._parse_response(raw)
-            print(f"[VLM] Result for {label}: {parsed.status.value.upper()} (Score: {parsed.overall_quality_score})")
+            print(f"[VLM Parsed Result] for {label}:")
+            print(f"  - Status: {parsed.status.value.upper()}")
+            print(f"  - Quality Score: {parsed.overall_quality_score}")
+            print(f"  - Explanation: {parsed.explanation}")
+            print(f"  - Required Action: {parsed.required_action.value}")
+            print(f"  - Defects: {parsed.defects}")
         except Exception as exc:  # noqa: BLE001 - VLM failures must degrade gracefully
             print(f"[VLM] Error analyzing {label}: {exc}")
             parsed = self._fallback_assessment(str(exc))
