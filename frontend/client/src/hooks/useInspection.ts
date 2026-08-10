@@ -1,13 +1,9 @@
 /**
  * Custom hook for running inspections against the FastAPI backend.
-<<<<<<< HEAD
- * Manages loading state, results, and error handling.
-=======
  * Manages loading state, progress stages, results, and error handling.
  *
  * The /inspect endpoint is now async (returns a job_id immediately).
  * This hook polls /inspect/status/{job_id} until the job is complete.
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
  */
 
 import { useCallback, useState } from 'react';
@@ -16,11 +12,6 @@ import type { InspectionResult } from '../types/inspection';
 
 type InspectionMode = 'detect' | 'inspect';
 
-<<<<<<< HEAD
-interface UseInspectionReturn {
-  result: InspectionResult | null;
-  isLoading: boolean;
-=======
 /**
  * Human-readable progress stages surfaced to the UI.
  * null means not running.
@@ -36,7 +27,6 @@ interface UseInspectionReturn {
   result: InspectionResult | null;
   isLoading: boolean;
   stage: InspectionStage;
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   error: string | null;
   run: (file: File, mode?: InspectionMode, vlmBackend?: string) => Promise<void>;
   reset: () => void;
@@ -45,29 +35,12 @@ interface UseInspectionReturn {
 export function useInspection(): UseInspectionReturn {
   const [result, setResult] = useState<InspectionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-<<<<<<< HEAD
-=======
   const [stage, setStage] = useState<InspectionStage>(null);
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(
     async (file: File, mode: InspectionMode = 'inspect', vlmBackend?: string) => {
       setIsLoading(true);
-<<<<<<< HEAD
-      setError(null);
-      try {
-        const res =
-          mode === 'detect'
-            ? await detectImage(file)
-            : await inspectImage(file, {
-                vlm_backend: vlmBackend as any,
-                confidence_gate: 0.4,
-              });
-        setResult(res);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Inspection failed';
-=======
       setStage('Uploading image...');
       setError(null);
       try {
@@ -102,7 +75,6 @@ export function useInspection(): UseInspectionReturn {
         } else if (msg.includes('404')) {
           msg = 'Backend endpoint not found. Make sure you are running the latest version of api.py.';
         }
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
         setError(msg);
       } finally {
         setIsLoading(false);
@@ -114,16 +86,8 @@ export function useInspection(): UseInspectionReturn {
   const reset = useCallback(() => {
     setResult(null);
     setError(null);
-<<<<<<< HEAD
-  }, []);
-
-  return { result, isLoading, error, run, reset };
-}
-
-=======
     setStage(null);
   }, []);
 
   return { result, isLoading, stage, error, run, reset };
 }
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d

@@ -1,14 +1,6 @@
 /**
  * Live Inspection page — image upload, inference, bounding box overlay, results.
  * Design: Industrial Precision — scan-line animation, status-coded results
-<<<<<<< HEAD
- */
-
-import { useRef, useState, useCallback } from 'react';
-import { Upload, ScanLine, X, Zap, Shield, AlertTriangle, Settings2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useInspection } from '../hooks/useInspection';
-=======
  *
  * Updated to show per-stage progress (Uploading → YOLO → VLM → Complete)
  * and to handle the new async job-based /inspect endpoint.
@@ -18,7 +10,6 @@ import { useRef, useState, useCallback } from 'react';
 import { Upload, ScanLine, X, Zap, Shield, AlertTriangle, Settings2, Loader2, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useInspection, type InspectionStage } from '../hooks/useInspection';
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
 import { DetectionCard } from '../components/inspection/DetectionCard';
 import { BoundingBoxOverlay } from '../components/inspection/BoundingBoxOverlay';
 import { StatusBadge } from '../components/inspection/StatusBadge';
@@ -28,10 +19,6 @@ import type { InspectionStatus } from '../types/inspection';
 type Mode = 'detect' | 'inspect';
 type VlmBackend = 'qwen-api' | 'gpt4o' | 'openrouter';
 
-<<<<<<< HEAD
-export default function LiveInspection() {
-  const { result, isLoading, error, run, reset } = useInspection();
-=======
 // ─── Stage progress indicator ─────────────────────────────────────────────────
 
 const DETECT_STAGES: InspectionStage[] = ['Uploading image...', 'YOLO detecting...', 'Complete'];
@@ -86,7 +73,6 @@ function StageProgressBar({ stage, mode }: { stage: InspectionStage; mode: Mode 
 
 export default function LiveInspection() {
   const { result, isLoading, stage, error, run, reset } = useInspection();
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
   const [mode, setMode] = useState<Mode>('inspect');
@@ -133,12 +119,9 @@ export default function LiveInspection() {
     ? 'skipped'
     : 'ok';
 
-<<<<<<< HEAD
-=======
   // Derive a short status label for the loading button
   const loadingLabel = stage && stage !== 'Complete' ? stage : 'Processing...';
 
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
   return (
     <div className="page-enter p-6 space-y-6">
       {/* Header */}
@@ -270,8 +253,6 @@ export default function LiveInspection() {
           </div>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
 
-<<<<<<< HEAD
-=======
           {/* Stage progress bar — shown while loading */}
           {isLoading && stage && (
             <div className="rounded border border-border bg-card p-3">
@@ -279,7 +260,6 @@ export default function LiveInspection() {
             </div>
           )}
 
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
           {/* Run button */}
           {imageUrl && (
             <button
@@ -289,10 +269,6 @@ export default function LiveInspection() {
             >
               {isLoading ? (
                 <>
-<<<<<<< HEAD
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  Running {mode === 'detect' ? 'YOLO Detection' : 'Full Pipeline'}...
-=======
                   <Loader2 className="w-4 h-4 animate-spin" />
                   {loadingLabel}
                 </>
@@ -300,7 +276,6 @@ export default function LiveInspection() {
                 <>
                   <CheckCircle2 className="w-4 h-4" />
                   Upload New Image
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
                 </>
               ) : (
                 <>
@@ -318,19 +293,12 @@ export default function LiveInspection() {
               <div>
                 <p className="text-sm font-semibold text-[#ef4444]">Inspection Failed</p>
                 <p className="text-xs text-muted-foreground mt-1 font-mono">{error}</p>
-<<<<<<< HEAD
-                <p className="text-xs text-muted-foreground mt-1">
-                  Ensure the FastAPI backend is running at{' '}
-                  <code className="font-mono text-primary">http://localhost:8000</code>
-                </p>
-=======
                 {error.includes('connect') && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Ensure the FastAPI backend is running at{' '}
                     <code className="font-mono text-primary">http://localhost:8000</code>
                   </p>
                 )}
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
               </div>
             </div>
           )}
@@ -376,10 +344,6 @@ export default function LiveInspection() {
             <div className="rounded border border-border bg-card p-6 text-center">
               <ScanLine className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">
-<<<<<<< HEAD
-                {isLoading ? 'Analyzing image...' : 'Upload an image to begin inspection'}
-              </p>
-=======
                 {isLoading
                   ? stage || 'Analyzing image...'
                   : 'Upload an image to begin inspection'}
@@ -393,7 +357,6 @@ export default function LiveInspection() {
                     : ''}
                 </p>
               )}
->>>>>>> be35e77e0b3359cd9193412b00f8f0385cac407d
             </div>
           )}
 
