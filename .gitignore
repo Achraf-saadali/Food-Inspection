@@ -6,3 +6,4 @@ outputs/
 .env
 .vscode/
 .idea/
+frontend/node_modules/**

@@ -1,0 +1,6 @@
+[2026-08-10T12:46:52.243Z] {"timestamp":1786366010848,"type":"xhr","method":"GET","url":"http://localhost:8000/health","request":{"body":null},"response":null,"duration":325,"error":{"message":"Network error"}}
+[2026-08-10T12:48:15.116Z] {"timestamp":1786366094535,"type":"xhr","method":"GET","url":"http://localhost:8000/health","request":{"body":null},"response":null,"duration":322,"error":{"message":"Network error"}}
+[2026-08-10T12:48:40.953Z] {"timestamp":1786366119274,"type":"xhr","method":"GET","url":"http://localhost:8000/health","request":{"body":null},"response":null,"duration":310,"error":{"message":"Network error"}}
+[2026-08-10T12:48:50.952Z] {"timestamp":1786366129471,"type":"xhr","method":"GET","url":"http://localhost:8000/health","request":{"body":null},"response":null,"duration":19,"error":{"message":"Network error"}}
+[2026-08-10T12:49:30.948Z] {"timestamp":1786366151789,"type":"xhr","method":"POST","url":"http://localhost:8000/inspect?vlm_backend=qwen-api&confidence_gate=0.4","request":{"body":{}},"response":null,"duration":17608,"error":{"message":"Network error"}}
+[2026-08-10T12:50:12.949Z] {"timestamp":1786366210425,"type":"xhr","method":"POST","url":"http://localhost:8000/inspect?vlm_backend=qwen-api&confidence_gate=0.4","request":{"body":{}},"response":null,"duration":1588,"error":{"message":"Network error"}}
