@@ -45,6 +45,7 @@ class ImageSize(BaseModel):
 class Detection(BaseModel):
     """Output of the YOLO stage for a single object."""
 
+    crop_id: str = Field(description="Stable identifier linking this detection to its crop and VLM result.")
     label: str
     class_id: int
     confidence: float = Field(ge=0.0, le=1.0)
@@ -82,6 +83,7 @@ class InspectionResult(BaseModel):
     image_size: ImageSize
     num_detections: int
     items: List[InspectionItem]
+    commentary: str = Field(description="Exactly one backend-generated human-readable summary for the original image.")
 
     def to_legacy_detection_json(self) -> dict:
         """Backwards-compatible view matching the existing

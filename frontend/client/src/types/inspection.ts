@@ -46,6 +46,8 @@ export interface InspectionResult {
   image_size: ImageSize;
   num_detections: number;
   items: InspectionItem[];
+  /** One backend-generated summary for the complete original image. */
+  commentary: string;
 }
 
 /** Legacy detection-only format from live_inference.py / session logs */
