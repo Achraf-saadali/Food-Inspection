@@ -137,6 +137,7 @@ python main.py --vlm qwen
 *   `s`: Save a snapshot (Image + JSON Report).
 *   `q`: Quit.
 
+<<<<<<< HEAD
 #### Option B: FastAPI Server
 Exposes the pipeline as a REST API for integration with dashboards or external services.
 ```bash
@@ -155,3 +156,40 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 *   `schemas.py`: Pydantic models for data consistency.
 *   `models/best.pt`: Fine-tuned YOLOv9c weights.
 *   `trainning_runs/train4/`: Training logs, curves, and metrics.
+=======
+This diagram now corresponds to stages 4–7 of the full system architecture
+presented at the beginning of this document (detection, cropping, VLM
+reasoning, and merged result) — implemented via `inspection_pipeline.py` and
+served over HTTP via `api.py`. Acquisition and alerting remain as described
+there.
+
+---
+
+
+
+```text
+Camera
+   ↓
+YOLO                     ✅
+   ↓
+Object Detection         ✅
+   ↓
+Object Crop              ✅
+   ↓
+VLM                      ✅
+   ↓
+Quality Reasoning        ✅
+   ↓
+Structured JSON          ✅
+   ↓
+Database / Dashboard / Alerts   🔄
+```
+
+---
+
+
+
+---
+
+
+>>>>>>> f8f3a21 (Update README.md)
