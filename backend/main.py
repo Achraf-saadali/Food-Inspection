@@ -6,7 +6,13 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+import sys
 from typing import Dict, List, Optional
+
+# Direct execution (py backend/main.py) needs the repository root on sys.path.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import cv2
 from dotenv import load_dotenv
@@ -35,7 +41,6 @@ DEFAULT_VLM_CONF_GATE = 0.6
 VLM_REFRESH_SECONDS = 1.5
 WAITING_EXPLANATION = "Waiting for VLM inspection."
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 env_path = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=env_path if env_path.exists() else None)
 
