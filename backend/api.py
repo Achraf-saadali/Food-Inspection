@@ -13,11 +13,13 @@ interface, per README Section 17 ("Integration Notes").
 
 from __future__ import annotations
 
+import csv
 import os
-import io
 import uuid
-import asyncio
+from pathlib import Path
 from typing import Dict, Any
+
+import yaml
 from functools import lru_cache
 from dotenv import load_dotenv
 
@@ -27,13 +29,23 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile, BackgroundT
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
+from backend.database import (
+    export_reports,
+    get_report,
+    get_report_summary,
+    initialize_database,
+    list_reports,
+    save_inspection,
+    save_uploaded_image,
+)
 from backend.inspection_pipeline import run_inspection
-from backend.schemas import InspectionResult
+from backend.schemas import InspectionResult, InspectionStatus
 from backend.vlm_reasoning import get_backend
 
 load_dotenv()
 
-app = FastAPI(title="Food Inspection API", version="0.4.0")
+app = FastAPI(title="Food Inspection API", version="0.5.0")
+initialize_database()
 
 # Allow the Vite dev server (port 3000) and any production frontend to call the API
 app.add_middleware(
@@ -44,7 +56,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_PATH = "models/best.pt"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+MODEL_PATH = str(PROJECT_ROOT / "models" / "best.pt")
+TRAINING_ARGS_PATH = PROJECT_ROOT / "training" / "runs" / "train4" / "args.yaml"
+TRAINING_RESULTS_PATH = PROJECT_ROOT / "training" / "runs" / "train4" / "results.csv"
 _frame_counter = 0
 
 # In-memory job store for async inspection
@@ -85,7 +100,14 @@ async def detect(file: UploadFile = File(...)) -> InspectionResult:
     )
 
 
-def process_inspection_job(job_id: str, image: np.ndarray, filename: str, vlm_backend_name: str, confidence_gate: float):
+def process_inspection_job(
+    job_id: str,
+    image: np.ndarray,
+    filename: str,
+    image_path: str,
+    vlm_backend_name: str,
+    confidence_gate: float,
+):
     global _frame_counter
     import time
     
@@ -110,6 +132,7 @@ def process_inspection_job(job_id: str, image: np.ndarray, filename: str, vlm_ba
         total_time = time.perf_counter() - start_time
         print(f"[API] Job {job_id} complete. Total time: {total_time:.3f}s")
         
+        result = save_inspection(result, report_id=job_id, image_path=image_path)
         _jobs[job_id]["status"] = "completed"
         _jobs[job_id]["result"] = result
     except Exception as e:
@@ -127,16 +150,19 @@ async def inspect(
     """Async Detection + VLM reasoning endpoint. Returns a job_id.
     Note: The VLM backend is now hardcoded to OpenRouter in backend/vlm_reasoning.py.
     """
-    image = _decode_upload(await file.read())
-    
+    raw_bytes = await file.read()
+    image = _decode_upload(raw_bytes)
+
     job_id = str(uuid.uuid4())
+    image_path = save_uploaded_image(raw_bytes, file.filename, job_id)
     _jobs[job_id] = {"status": "pending", "result": None, "error": None}
     
     background_tasks.add_task(
         process_inspection_job,
         job_id=job_id,
         image=image,
-        filename=file.filename,
+        filename=file.filename or "upload",
+        image_path=image_path,
         vlm_backend_name="openrouter",
         confidence_gate=confidence_gate
     )
@@ -158,6 +184,64 @@ async def get_inspection_status(job_id: str):
         return {"status": job["status"]}
 
 
+@app.get("/reports")
+async def reports(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    status: InspectionStatus | None = None,
+    search: str | None = None,
+) -> list[InspectionResult]:
+    """Return real persisted inspections, newest first."""
+    return list_reports(limit=limit, offset=offset, status=status, search=search)
+
+
+@app.get("/reports/summary")
+async def reports_summary() -> dict:
+    """Return dashboard metrics calculated from persisted inspections only."""
+    return get_report_summary()
+
+
+@app.get("/reports/export")
+async def reports_export() -> list[dict]:
+    """Return all saved reports for a user-controlled local export."""
+    return export_reports()
+
+
+@app.get("/reports/{report_id}", response_model=InspectionResult)
+async def report_detail(report_id: str) -> InspectionResult:
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report
+
+
+@app.get("/model-info")
+async def model_info() -> dict:
+    """Read model details from the deployed detector and committed training run."""
+    with TRAINING_ARGS_PATH.open(encoding="utf-8") as config_file:
+        training_args = yaml.safe_load(config_file) or {}
+    with TRAINING_RESULTS_PATH.open(encoding="utf-8", newline="") as results_file:
+        final_metrics = list(csv.DictReader(results_file))[-1]
+    model = get_yolo_model()
+    return {
+        "name": "Food Inspection YOLO Detector",
+        "version": "train4",
+        "architecture": str(training_args.get("model", "YOLO detector")),
+        "num_classes": len(model.names),
+        "class_names": [str(name) for _, name in sorted(model.names.items())],
+        "input_size": f"{training_args.get('imgsz', 'unknown')} × {training_args.get('imgsz', 'unknown')}",
+        "training_epochs": int(training_args.get("epochs", 0)),
+        "map50": float(final_metrics.get("metrics/mAP50(B)", 0)) * 100,
+        "precision": float(final_metrics.get("metrics/precision(B)", 0)) * 100,
+        "recall": float(final_metrics.get("metrics/recall(B)", 0)) * 100,
+        "vlm_backends": ["OpenRouter (runtime)"],
+    }
+
+
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "database": "ready",
+        "model_loaded": get_yolo_model.cache_info().currsize > 0,
+    }

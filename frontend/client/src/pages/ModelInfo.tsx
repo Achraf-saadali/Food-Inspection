@@ -9,19 +9,6 @@ import { getModelInfo } from '../api/inspectionApi';
 import type { ModelInfo } from '../types/inspection';
 import { ConfidenceBar } from '../components/inspection/ConfidenceBar';
 
-const FOOD_CLASSES = [
-  'apple', 'artichoke', 'asparagus', 'avocado', 'banana', 'bean', 'beet',
-  'bell pepper/capsicum', 'broccoli', 'brussels sprout', 'cabbage', 'carrot',
-  'cauliflower', 'celery', 'cherry', 'chili pepper', 'coconut', 'corn',
-  'cucumber', 'eggplant', 'fig', 'garlic', 'ginger', 'grape', 'grapefruit',
-  'green bean', 'kale', 'kiwi', 'leek', 'lemon', 'lettuce', 'lime',
-  'mango', 'melon', 'mushroom', 'onion', 'orange/orange fruit', 'papaya',
-  'peach', 'pear', 'peas', 'pickle', 'pineapple', 'plum', 'pomegranate',
-  'potato', 'pumpkin', 'radish', 'raspberry', 'spinach', 'squash',
-  'strawberry', 'sweet potato', 'tomato', 'turnip', 'watermelon',
-  'zucchini/courgette',
-];
-
 const PIPELINE_STAGES = [
   {
     step: '01', label: 'Image Input', icon: Layers,
@@ -40,12 +27,12 @@ const PIPELINE_STAGES = [
   },
   {
     step: '04', label: 'VLM Reasoning', icon: Brain,
-    desc: 'The crop and a structured prompt are sent to the VLM (GPT-4o, Qwen-VL, or Gemini). Returns JSON with status, quality metrics, defects, and required action.',
+    desc: 'The crop and an ingredient-specific prompt are sent through the configured OpenRouter VLM. It returns structured status, quality metrics, defects, visual evidence, and action.',
     color: '#34d399',
   },
   {
     step: '05', label: 'Unified Output', icon: Shield,
-    desc: 'Results are merged into an InspectionResult object containing all detections with full quality assessments. Logged to JSONL and returned via API.',
+    desc: 'Results include a farmer-facing quality summary, are saved to local SQLite report history with the upload reference, and returned through the API.',
     color: '#22c55e',
   },
 ];
@@ -114,7 +101,7 @@ export default function ModelInfo() {
               <ConfidenceBar value={info.recall / 100} label={`Recall: ${info.recall}%`} showPercent={false} />
             </div>
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-              Metrics reflect the 63-class food detection task. The model demonstrates strong localization capabilities on the LVIS Fruits & Vegetables dataset (~8,200 images).
+              Metrics are read from the committed final training-run record. The deployed class count and labels are read directly from the loaded detector.
             </p>
           </div>
 
@@ -169,12 +156,12 @@ export default function ModelInfo() {
           <div className="rounded border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Detectable Classes ({FOOD_CLASSES.length})
+                Detectable Classes ({info.class_names.length})
               </h3>
-              <span className="text-xs font-mono text-muted-foreground">YOLOv9c · LVIS dataset</span>
+              <span className="text-xs font-mono text-muted-foreground">LOADED FROM DEPLOYED MODEL</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {FOOD_CLASSES.map((cls) => (
+              {info.class_names.map((cls) => (
                 <span
                   key={cls}
                   className="text-xs font-mono px-2 py-0.5 rounded border border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors capitalize"
@@ -192,6 +179,8 @@ export default function ModelInfo() {
               {[
                 { method: 'POST', path: '/detect', desc: 'YOLO detection only — fast, no VLM cost', color: '#60a5fa' },
                 { method: 'POST', path: '/inspect', desc: 'Full pipeline: YOLO + VLM quality reasoning', color: '#22c55e' },
+                { method: 'GET', path: '/reports', desc: 'Saved inspection history from SQLite', color: '#a78bfa' },
+                { method: 'GET', path: '/reports/summary', desc: 'Live quality and defect metrics', color: '#34d399' },
                 { method: 'GET', path: '/health', desc: 'Backend health check', color: '#f59e0b' },
               ].map((ep) => (
                 <div key={ep.path} className="flex items-start gap-3 p-3 rounded bg-secondary/50 border border-border">

@@ -1,6 +1,5 @@
 # Food Inspection Timeout Debugging Report
 
-**Author:** Manus AI  
 **Date:** August 10, 2026  
 
 ## 1. Root Cause of the Timeout

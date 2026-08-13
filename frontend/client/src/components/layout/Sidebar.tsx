@@ -31,16 +31,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border mt-0.5">
         <div className="w-8 h-8 flex items-center justify-center bg-primary/10 border border-primary/30" style={{ borderRadius: 2 }}>
-          <img
-            src="/manus-storage/foodscan-logo_995737e5.png"
-            alt="FoodScan AI"
-            className="w-6 h-6 object-contain"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-              (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-            }}
-          />
-          <Activity className="w-5 h-5 text-primary hidden" />
+          <Activity className="w-5 h-5 text-primary" />
         </div>
         <div>
           <p className="text-sm font-bold text-foreground font-mono tracking-tight">

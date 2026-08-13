@@ -29,6 +29,8 @@ export interface QualityAssessment {
   quality_metrics: Record<string, number>;
   defects: string[];
   explanation: string;
+  /** Short farmer-facing interpretation derived from score, defects, and action. */
+  commentary: string;
   required_action: RequiredAction;
   vlm_backend: string;
   latency_ms: number | null;
@@ -40,6 +42,8 @@ export interface InspectionItem {
 }
 
 export interface InspectionResult {
+  /** Stable SQLite identifier, present for completed full inspections. */
+  report_id: string | null;
   frame_id: number;
   timestamp: string;
   source: string;
@@ -67,7 +71,10 @@ export interface InspectionStats {
   uncertain_count: number;
   skipped_count: number;
   avg_confidence: number;
+  avg_quality_score: number | null;
   top_classes: Array<{ label: string; count: number }>;
+  defect_breakdown: Array<{ defect: string; count: number }>;
+  action_counts: Record<RequiredAction, number>;
 }
 
 /** Model metadata */
@@ -76,6 +83,7 @@ export interface ModelInfo {
   version: string;
   architecture: string;
   num_classes: number;
+  class_names: string[];
   input_size: string;
   training_epochs: number;
   map50: number;

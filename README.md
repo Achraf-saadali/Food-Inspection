@@ -45,8 +45,10 @@ React overlays, cards, status, metrics, export
 | Browser upload | Drag-and-drop/file selection in `LiveInspection.tsx` | Implemented |
 | Live webcam/video CLI | `backend/live_inference.py` | Implemented |
 | Full local quality CLI | `backend/main.py` | Implemented |
-| Dashboard reports/statistics | React screens and client helpers | Present, but some data is mocked/static |
-| Persistent job storage | None; jobs live in a process-local dictionary | Not implemented |
+| Farmer-facing quality commentary | Deterministic text derived from score, defects, and action | Implemented |
+| Dashboard reports/statistics | SQLite-backed API endpoints and React report views | Implemented; no mock inspection data |
+| Persisted inspection history | Local SQLite database plus uploaded-image references | Implemented for completed full inspections |
+| Async job state | Process-local dictionary during active processing | Not durable; clears on restart |
 | Dataset manifest and split metadata | Dataset YAML is referenced externally from the training run | Not committed |
 
 ## Repository organization
@@ -54,7 +56,8 @@ React overlays, cards, status, metrics, export
 ```text
 .
 ├── backend/
-│   ├── api.py                  # FastAPI endpoints and background job lifecycle
+│   ├── api.py                  # FastAPI endpoints, jobs, reports, and export
+│   ├── database.py             # Single SQLite connection, report storage, and summaries
 │   ├── inspection_pipeline.py  # YOLO -> crop -> optional VLM orchestration
 │   ├── live_inference.py       # Detection-only webcam/video/image CLI
 │   ├── main.py                 # Full local webcam quality-inspection CLI
@@ -74,7 +77,8 @@ React overlays, cards, status, metrics, export
 │   ├── notebooks/              # Training notebook
 │   └── runs/                   # Ultralytics run configuration, plots, metrics, weights
 ├── runtime_artifacts/
-│   └── outputs/                # Saved snapshots and JSONL sessions
+│   ├── outputs/                # Saved uploads, snapshots, and JSONL sessions
+│   └── food_inspection.db      # Local SQLite report history, created at runtime
 ├── docs/
 │   ├── QUALITY_ASSESSMENT.md   # Quality-assessment contract and profiles
 │   ├── Final_Report.md         # Timeout diagnosis and async-job history
@@ -169,15 +173,21 @@ A representative result is shaped like this:
 
 The default OpenRouter model in the adapter is `google/gemini-flash-1.5-8b`. The API path passes `openrouter` explicitly. The local CLI still exposes several historical `--vlm` choices, but the factory behavior takes precedence, so users should configure `OPENROUTER_API_KEY` for the implemented full-quality path.
 
-## End-to-end image flow
+## Farmer-facing quality commentary
+
+The VLM still returns machine-readable status, score, metrics, defects, explanation, and action. `backend/inspection_pipeline.py` then derives a short operator paragraph from those fields, without a second model call. The commentary prioritizes explicit defects, otherwise names the weakest available metric, and always states the quality score when available and recommended action. The dashboard and report detail cards show this **Quality summary** before the raw visual evidence and metric bars.
+
+For example: *“Tomato. Quality score: 0.62/1.00. Observed issue: bruising. Recommended action: flag for review.”* The original structured values remain in the API result and JSON export for traceability.
+
+## Persistent reports and end-to-end image flow
 
 The browser entry point is `frontend/client/src/pages/LiveInspection.tsx`. A user drops an image or selects a file. The page passes the file and selected mode to `useInspection`, which delegates to `frontend/client/src/api/inspectionApi.ts`.
 
 For detection-only mode, the client sends the image as a `multipart/form-data` field named `file` to `POST /detect`. FastAPI reads the upload, decodes the bytes with OpenCV, loads the cached YOLO model, and calls `backend.inspection_pipeline.run_inspection()` with no VLM backend.
 
-For full inspection mode, the client sends the same multipart field plus `confidence_gate` to `POST /inspect`. The endpoint decodes the image, creates a UUID job, stores `pending` state in the process-local `_jobs` dictionary, and schedules `process_inspection_job` through FastAPI `BackgroundTasks`. The immediate response is `{"job_id": "...", "status": "pending"}`.
+For full inspection mode, the client sends the same multipart field plus `confidence_gate` to `POST /inspect`. The endpoint decodes and saves the uploaded image under `runtime_artifacts/outputs/uploads/`, creates a UUID job, stores `pending` state in the process-local `_jobs` dictionary, and schedules `process_inspection_job` through FastAPI `BackgroundTasks`. The immediate response is `{"job_id": "...", "status": "pending"}`.
 
-The frontend then polls `GET /inspect/status/{job_id}` approximately once per second. While waiting, it presents upload, YOLO, and VLM progress stages. When the background job finishes, the endpoint returns the unified `InspectionResult`; if processing fails, it returns a failed status and error message. This avoids holding the original HTTP request open while external VLM calls execute.
+The frontend then polls `GET /inspect/status/{job_id}` approximately once per second. While waiting, it presents upload, YOLO, and VLM progress stages. When processing completes, the API writes the full result, image reference, quality scores, defects, actions, and farmer commentary into `runtime_artifacts/food_inspection.db`, then returns the persisted `InspectionResult` with a stable `report_id`. If processing fails, it returns a failed status and error message. This avoids holding the original HTTP request open while external VLM calls execute.
 
 Inside `run_inspection()`, YOLO produces boxes, class IDs, labels, and confidence scores. Coordinates are clamped while cropping and normalized against the original image width and height. A crop is sent to the VLM only when a backend exists and the detector confidence is at least the configured gate. The result is then rendered by the frontend through `BoundingBoxOverlay`, `DetectionCard`, `ConfidenceBar`, `StatusBadge`, and the live inspection result panel.
 
@@ -188,23 +198,24 @@ The frontend API base URL is `VITE_API_BASE_URL`, defaulting to `http://localhos
 | File | Responsibility and important behavior |
 |---|---|
 | `backend/api.py` | FastAPI application, CORS, cached YOLO/VLM constructors, upload decoding, `/detect`, `/inspect`, status polling, and `/health`. The job store is in memory and is not durable or shared across workers. |
-| `backend/inspection_pipeline.py` | Framework-neutral orchestration. It converts Ultralytics boxes into Pydantic detections, crops objects, applies the VLM confidence gate, and preserves typed skipped results. |
+| `backend/database.py` | The single SQLite module. It creates the local database, persists completed inspection results and image paths, reads real report history, aggregates dashboard metrics, and produces JSON exports. |
+| `backend/inspection_pipeline.py` | Framework-neutral orchestration. It converts Ultralytics boxes into Pydantic detections, crops objects, applies the VLM confidence gate, generates farmer-facing commentary, and preserves typed skipped results. |
 | `backend/live_inference.py` | Detection-only CLI for webcam, video, and still images. It annotates frames and writes JSONL logs plus snapshots under `runtime_artifacts/outputs`. |
 | `backend/main.py` | Full local webcam/video application. It runs detection and optional quality reasoning, draws status-colored boxes, writes structured session logs, and saves snapshots. |
 | `backend/quality_profiles.py` | Controlled ingredient-to-metric mapping and fallback metrics for unknown classes. |
 | `backend/schemas.py` | Pydantic models and enums shared by detection, VLM reasoning, API serialization, and frontend expectations. |
 | `backend/vlm_reasoning.py` | Prompt generation, provider adapters, JSON extraction, semantic normalization, fallback assessment, and latency measurement. |
 | `frontend/client/src/api/client.ts` | Axios base URL, polling timeout, development request logging, and normalized API errors. |
-| `frontend/client/src/api/inspectionApi.ts` | Multipart upload, job submission, one-second status polling, mock history/statistics/model helpers, and frontend-facing progress callbacks. |
+| `frontend/client/src/api/inspectionApi.ts` | Multipart upload, job submission, one-second status polling, real SQLite report/history/summary requests, export, and frontend-facing progress callbacks. |
 | `frontend/client/src/hooks/useInspection.ts` | React state for result, loading, stage, and error; selects detection-only or full inspection mode. |
 | `frontend/client/src/pages/LiveInspection.tsx` | Main real inspection screen: file input, drag/drop, mode selection, progress, image overlay, overall status, and per-item results. |
 | `frontend/client/src/components/inspection/BoundingBoxOverlay.tsx` | Positions normalized detection boxes over the displayed image. |
-| `frontend/client/src/components/inspection/DetectionCard.tsx` | Displays class, confidence, quality score, explanation, defects, metrics, action, backend, and latency. |
+| `frontend/client/src/components/inspection/DetectionCard.tsx` | Displays class, confidence, quality score, farmer-facing commentary, visual evidence, defects, metrics, action, backend, and latency. |
 | `frontend/client/src/components/inspection/ConfidenceBar.tsx` | Visual confidence/score indicator. |
 | `frontend/client/src/components/inspection/StatusBadge.tsx` | Visual status mapping for quality states. |
-| `frontend/client/src/pages/Dashboard.tsx` | Dashboard shell and summary presentation. Some summary values are sourced from client helpers rather than a persistent backend. |
-| `frontend/client/src/pages/Reports.tsx` | Search, sort, filter, JSON preview, and export behavior for inspection history; current history data is mock/static. |
-| `frontend/client/src/pages/ModelInfo.tsx` | Model and API presentation page; several displayed model values/classes are static UI content. |
+| `frontend/client/src/pages/Dashboard.tsx` | Dashboard shell and summary presentation backed by the real persisted-report summary endpoint. |
+| `frontend/client/src/pages/Reports.tsx` | Search, sort, filter, farmer-ready quality details, defect-frequency summary, JSON preview, and export for real persisted inspection history. |
+| `frontend/client/src/pages/ModelInfo.tsx` | Model and API presentation page populated from the backend’s deployed detector and committed training artifacts. |
 | `frontend/client/src/types/inspection.ts` | TypeScript mirror of the backend inspection contracts plus reporting/model view types. |
 | `training/notebooks/food_detection.ipynb` | Exploratory/training notebook retained as a source artifact. |
 | `training/runs/train4/` | Evidence from the recorded training run: configuration, CSV metrics, plots, predictions, validation images, and weights. |
@@ -246,6 +257,9 @@ Useful endpoints are:
 | `POST` | `/detect` | Multipart image upload and YOLO-only result |
 | `POST` | `/inspect` | Multipart image upload and immediate job ID |
 | `GET` | `/inspect/status/{job_id}` | Poll job status and retrieve completed result |
+| `GET` | `/reports` | Read real persisted inspection history |
+| `GET` | `/reports/summary` | Read real dashboard and defect metrics |
+| `GET` | `/reports/export` | Export saved results as JSON |
 
 A minimal detection request is:
 
@@ -295,7 +309,7 @@ Press `q` or `Esc` to exit. Press `s` to save an annotated image and JSON report
 
 ## Operational limitations and next engineering steps
 
-The process-local `_jobs` dictionary is suitable for a single-process demonstration or development server, but jobs disappear on restart and are not shared between multiple workers. A production deployment should replace it with durable job storage and a worker system, then add job expiration and concurrency limits.
+Completed full-inspection results are persisted locally in SQLite, but the process-local `_jobs` dictionary used while work is in progress disappears on restart and is not shared between workers. A production deployment should replace the active-job dictionary with durable job storage and a worker system, then add job expiration and concurrency limits.
 
 The API currently allows all CORS origins. This is convenient for development but should be restricted to the deployed frontend origin in production. Upload validation should also enforce file size, MIME type, image dimensions, and a safe decoding policy.
 

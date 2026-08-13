@@ -16,7 +16,8 @@ The `QualityAssessment` object now contains the following fields:
 | `overall_quality_score` | `float` | A normalized score (0.0 to 1.0) where 1.0 is perfect quality. |
 | `quality_metrics` | `dict` | A dictionary of ingredient-specific metrics and their scores. |
 | `defects` | `list[str]` | A list of specific defects detected by the VLM. |
-| `explanation` | `string` | A natural language explanation of the visual evidence. |
+| `explanation` | `string` | A natural language explanation of the visual evidence from the VLM. |
+| `commentary` | `string` | A short farmer-facing paragraph derived locally from score, defects, and action. |
 | `required_action` | `enum` | `none`, `flag_for_review`, or `remove`. |
 
 ### Example JSON Output (Banana)
@@ -34,6 +35,7 @@ The `QualityAssessment` object now contains the following fields:
   },
   "defects": ["browning", "bruising"],
   "explanation": "Significant browning and visible bruising on the mid-section of the peel.",
+  "commentary": "Banana. Quality score: 0.45/1.00. Observed issues: browning, bruising. Recommended action: remove from the saleable batch.",
   "required_action": "remove"
 }
 ```

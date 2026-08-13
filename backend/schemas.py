@@ -61,6 +61,8 @@ class QualityAssessment(BaseModel):
     quality_metrics: Dict[str, float] = Field(default_factory=dict)
     defects: List[str] = Field(default_factory=list)
     explanation: str
+    # Plain-language quality decision derived from the structured assessment.
+    commentary: str = ""
     required_action: RequiredAction = RequiredAction.NONE
     vlm_backend: str
     latency_ms: Optional[float] = None
@@ -76,6 +78,7 @@ class InspectionItem(BaseModel):
 class InspectionResult(BaseModel):
     """Top-level unified result for one processed frame/image."""
 
+    report_id: Optional[str] = None
     frame_id: int
     timestamp: datetime
     source: str

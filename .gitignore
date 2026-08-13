@@ -3,6 +3,9 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 runtime_artifacts/outputs/
+runtime_artifacts/*.db
+runtime_artifacts/*.sqlite
+runtime_artifacts/*.sqlite3
 .env
 .vscode/
 .idea/
