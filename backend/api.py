@@ -1,7 +1,7 @@
 """
 FastAPI surface for the inspection pipeline.
 
-    POST /detect   -> YOLO detection only (matches current live_inference.py output)
+    POST /detect   -> YOLO detection only (matches current backend/live_inference.py output)
     POST /inspect  -> YOLO detection + VLM quality reasoning (unified JSON)
 
 Run with:
@@ -125,7 +125,7 @@ async def inspect(
     confidence_gate: float = Query(default=0.4, ge=0.0, le=1.0),
 ):
     """Async Detection + VLM reasoning endpoint. Returns a job_id.
-    Note: The VLM backend is now hardcoded to OpenRouter in vlm_reasoning.py.
+    Note: The VLM backend is now hardcoded to OpenRouter in backend/vlm_reasoning.py.
     """
     image = _decode_upload(await file.read())
     

@@ -9,8 +9,8 @@ The timeout issue occurs because the full inference pipeline (YOLO detection + V
 - **Wait, why 3 seconds?**
   Let's re-examine `vite.config.ts` or the frontend server. If there's a reverse proxy (like Nginx) or a hosting platform (like Vercel/Netlify/Heroku serverless functions) involved, they often have strict timeouts (e.g., Vercel hobby plan is 10s, sometimes 3s for certain edge functions or proxies).
   However, locally, the Axios timeout is 30s. The user mentioned "request appears to timeout around 3000 ms". This could be a typo in their observation, or an implicit timeout in a browser/proxy.
-- **Backend Bottleneck**: `vlm_reasoning.py` and `inspection_pipeline.py`
-  The backend endpoint `/inspect` in `api.py` synchronously calls `run_inspection`, which synchronously loops over YOLO detections and calls the VLM API (`vlm_backend.analyze`) for each detection sequentially. If an image has 3 items, it makes 3 sequential HTTP calls to an external VLM (like GPT-4o or Qwen API). Each VLM call takes ~1-3 seconds.
+- **Backend Bottleneck**: `backend/vlm_reasoning.py` and `backend/inspection_pipeline.py`
+  The backend endpoint `/inspect` in `backend/api.py` synchronously calls `run_inspection`, which synchronously loops over YOLO detections and calls the VLM API (`vlm_backend.analyze`) for each detection sequentially. If an image has 3 items, it makes 3 sequential HTTP calls to an external VLM (like GPT-4o or Qwen API). Each VLM call takes ~1-3 seconds.
   Total latency = YOLO time + (N * VLM time). If N=3, latency easily exceeds 3-9 seconds.
 
 ## 3. Why It Happens
@@ -42,6 +42,6 @@ Since this is a standalone FastAPI app without Redis/Celery, we will implement a
 If I just use `asyncio.create_task` or FastAPI `BackgroundTasks`, it's very easy to implement without adding new dependencies.
 
 Let's refine the plan:
-1. **Add Timing Logs**: Update `api.py` and `inspection_pipeline.py` to log exact timings.
-2. **Refactor Backend to Async**: Implement the lightweight job queue in `api.py`.
+1. **Add Timing Logs**: Update `backend/api.py` and `backend/inspection_pipeline.py` to log exact timings.
+2. **Refactor Backend to Async**: Implement the lightweight job queue in `backend/api.py`.
 3. **Refactor Frontend**: Update `inspectionApi.ts`, `useInspection.ts`, and `LiveInspection.tsx` to poll and show progress.

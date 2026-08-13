@@ -40,7 +40,7 @@ The `QualityAssessment` object now contains the following fields:
 
 ## Quality Profiles
 
-Relevant metrics are controlled by **Quality Profiles** defined in `quality_profiles.py`.
+Relevant metrics are controlled by **Quality Profiles** defined in `backend/quality_profiles.py`.
 
 ### How it works:
 1. **YOLO** detects the class (e.g., "banana").
@@ -51,7 +51,7 @@ Relevant metrics are controlled by **Quality Profiles** defined in `quality_prof
 
 ### Adding a New Fruit/Vegetable
 To add support for a new ingredient:
-1. Open `quality_profiles.py`.
+1. Open `backend/quality_profiles.py`.
 2. Add a new entry to the `QUALITY_PROFILES` dictionary.
 3. Define the list of visual metrics you want the VLM to evaluate.
 
@@ -62,7 +62,7 @@ QUALITY_PROFILES["strawberry"] = [
 ```
 
 ## Handling Unknown Classes
-If the YOLO model detects a class that is not configured in `quality_profiles.py`, the system falls back to a set of `COMMON_METRICS`:
+If the YOLO model detects a class that is not configured in `backend/quality_profiles.py`, the system falls back to a set of `COMMON_METRICS`:
 - Ripeness
 - Bruising
 - Mold

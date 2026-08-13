@@ -19,8 +19,8 @@ While the frontend Axios client was technically configured with a 30-second time
 ## 2. Exact Files Causing the Bottleneck
 
 The bottleneck was located in two primary files:
-- **`api.py`**: The `/inspect` endpoint was defined as a standard synchronous endpoint that blocked until `run_inspection` completed.
-- **`inspection_pipeline.py`**: The `run_inspection` function sequentially looped over `yolo_results.boxes` and synchronously called `vlm_backend.analyze(crop, label, confidence)`.
+- **`backend/api.py`**: The `/inspect` endpoint was defined as a standard synchronous endpoint that blocked until `run_inspection` completed.
+- **`backend/inspection_pipeline.py`**: The `run_inspection` function sequentially looped over `yolo_results.boxes` and synchronously called `vlm_backend.analyze(crop, label, confidence)`.
 
 ## 3. Why It Happened
 
@@ -30,7 +30,7 @@ The original architecture was designed for simplicity, treating the full pipelin
 
 To resolve this without adding heavy external dependencies (like Redis or Celery), I implemented a **Lightweight Async Job Queue with Polling**:
 
-1. **Backend Asynchronous Processing (`api.py`)**:
+1. **Backend Asynchronous Processing (`backend/api.py`)**:
    - I introduced an in-memory job store (`_jobs` dictionary) to track the state of inspections.
    - The `/inspect` endpoint was refactored to use FastAPI's `BackgroundTasks`. It now immediately returns a unique `job_id` and a `pending` status, while the heavy YOLO and VLM inference runs in the background.
    - A new endpoint, `GET /inspect/status/{job_id}`, was added to allow the frontend to poll for the result.

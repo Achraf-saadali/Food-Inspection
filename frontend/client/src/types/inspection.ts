@@ -48,7 +48,7 @@ export interface InspectionResult {
   items: InspectionItem[];
 }
 
-/** Legacy detection-only format from live_inference.py / session logs */
+/** Legacy detection-only format from backend/live_inference.py / session logs */
 export interface LegacyInspectionResult {
   frame_id: number;
   timestamp: string;

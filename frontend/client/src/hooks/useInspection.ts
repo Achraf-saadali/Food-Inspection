@@ -72,7 +72,7 @@ export function useInspection(): UseInspectionReturn {
         } else if (msg.includes('Network Error') || msg.includes('ECONNREFUSED')) {
           msg = 'Cannot connect to the backend. Make sure the FastAPI server is running at http://localhost:8000.';
         } else if (msg.includes('404')) {
-          msg = 'Backend endpoint not found. Make sure you are running the latest version of api.py.';
+          msg = 'Backend endpoint not found. Make sure you are running uvicorn backend.api:app from the repository root.';
         }
         setError(msg);
       } finally {

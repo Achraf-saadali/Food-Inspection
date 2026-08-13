@@ -1,7 +1,7 @@
 /**
  * Inspection API service.
  *
- * Wraps all FastAPI endpoints from api.py:
+ * Wraps all FastAPI endpoints from backend/api.py:
  *   POST /detect                    — YOLO detection only (synchronous)
  *   POST /inspect                   — Async YOLO + VLM: returns { job_id }
  *   GET  /inspect/status/{job_id}   — Poll for job result

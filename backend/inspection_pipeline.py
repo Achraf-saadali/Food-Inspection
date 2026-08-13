@@ -3,7 +3,7 @@ Orchestrates the full detection + reasoning pipeline:
 
     image -> YOLO -> detections -> crop each -> VLM (optional) -> InspectionResult
 
-Kept separate from live_inference.py so the same function can be called from
+Kept separate from backend/live_inference.py so the same function can be called from
 the webcam/video loop, the FastAPI endpoints, and the benchmark script.
 """
 
