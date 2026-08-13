@@ -1,5 +1,5 @@
 /**
- * TypeScript interfaces mirroring the Pydantic schemas from schemas.py
+ * TypeScript interfaces mirroring the Pydantic schemas from backend/schemas.py
  * Design: Industrial Precision — data types match the real backend contract exactly
  */
 

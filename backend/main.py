@@ -9,9 +9,9 @@ import cv2
 from ultralytics import YOLO
 from dotenv import load_dotenv
 
-from inspection_pipeline import run_inspection
-from vlm_reasoning import get_backend
-from schemas import InspectionStatus
+from backend.inspection_pipeline import run_inspection
+from backend.vlm_reasoning import get_backend
+from backend.schemas import InspectionStatus
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -30,7 +30,7 @@ else:
 
 DEFAULT_VLM_CONF_GATE = 0.6  # Only run VLM on high-confidence detections
 
-OUTPUT_DIR = Path("outputs")
+OUTPUT_DIR = Path("runtime_artifacts/outputs")
 SNAPSHOT_DIR = OUTPUT_DIR / "snapshots"
 LOG_DIR = OUTPUT_DIR / "logs"
 

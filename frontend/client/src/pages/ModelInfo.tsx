@@ -209,7 +209,7 @@ export default function ModelInfo() {
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-3 font-mono">
-              Backend: <span className="text-primary">uvicorn api:app --host 0.0.0.0 --port 8000</span>
+              Backend: <span className="text-primary">uvicorn backend.api:app --host 0.0.0.0 --port 8000</span>
             </p>
           </div>
         </div>

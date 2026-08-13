@@ -15,14 +15,14 @@ Works with:
 
 Usage
 -----
-  python live_inference.py
-  python live_inference.py --model models/best.pt --camera 0 --conf 0.4
-  python live_inference.py --source samples/fridge.mp4
-  python live_inference.py --source samples/plate.jpg
+  python -m backend.live_inference
+  python -m backend.live_inference --model models/best.pt --source 0 --conf 0.4
+  python -m backend.live_inference --source samples/fridge.mp4
+  python -m backend.live_inference --source samples/plate.jpg
 
 Controls (live/video window)
 -----------------------------
-  s   -> save current frame (annotated .jpg + .json) to outputs/snapshots
+  s   -> save current frame (annotated .jpg + .json) to runtime_artifacts/outputs/snapshots
   q   -> quit
   ESC -> quit
 
@@ -46,7 +46,7 @@ DEFAULT_MODEL_PATH = "models/best.pt"
 DEFAULT_CONF_THRESHOLD = 0.4
 DEFAULT_IOU_THRESHOLD = 0.5
 
-OUTPUT_DIR = Path("outputs")
+OUTPUT_DIR = Path("runtime_artifacts/outputs")
 SNAPSHOT_DIR = OUTPUT_DIR / "snapshots"
 LOG_DIR = OUTPUT_DIR / "logs"
 
@@ -67,7 +67,7 @@ class LiveIngredientDetector:
             raise FileNotFoundError(
                 f"Model weights not found at: {self.model_path}\n"
                 f"Copy your trained weights there, e.g.:\n"
-                f"  cp runs/detect/train4/weights/best.pt models/best.pt"
+                f"  cp training/runs/train4/weights/best.pt models/best.pt"
             )
 
         print(f"[INFO] Loading model from {self.model_path} ...")

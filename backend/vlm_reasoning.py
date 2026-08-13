@@ -21,8 +21,8 @@ from typing import Optional
 import numpy as np
 
 from dotenv import load_dotenv
-from quality_profiles import get_quality_metrics
-from schemas import InspectionStatus, QualityAssessment, RequiredAction
+from backend.quality_profiles import get_quality_metrics
+from backend.schemas import InspectionStatus, QualityAssessment, RequiredAction
 
 # Ensure environment variables are loaded
 load_dotenv()
@@ -61,6 +61,7 @@ class VLMBackend(ABC):
     def analyze(
         self, crop: np.ndarray, label: str, confidence: float
     ) -> QualityAssessment:
+        # Select quality dimensions from the detected ingredient class.
         metrics = get_quality_metrics(label)
         metrics_list = "\n".join([f"- {m}" for m in metrics])
         metrics_json_schema = ",\n    ".join([f'"{m}": <float 0.0-1.0>' for m in metrics])
@@ -78,7 +79,7 @@ class VLMBackend(ABC):
             raw = self._call_model(crop, prompt)
             parsed = self._parse_response(raw)
             print(f"[VLM] Result for {label}: {parsed.status.value.upper()} (Score: {parsed.overall_quality_score})")
-        except Exception as exc:  # noqa: BLE001 - VLM failures must degrade gracefully
+        except Exception as exc:  # noqa: BLE001 - keep one failed crop from aborting the frame
             print(f"[VLM] Error analyzing {label}: {exc}")
             parsed = self._fallback_assessment(str(exc))
         
@@ -320,8 +321,7 @@ class OpenRouterBackend(VLMBackend):
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
     """Factory so the pipeline/API can select a backend by string flag.
     
-    HARDCODED: This system is now restricted to use ONLY the OpenRouter API.
-    All requests, regardless of the 'name' parameter, will route to OpenRouter.
+    Runtime currently routes all requests through OpenRouter, regardless of name.
     """
     kwargs = {}
     if model:

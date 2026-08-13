@@ -1,7 +1,7 @@
 /**
  * Axios HTTP client for the Food Inspection FastAPI backend.
  *
- * Backend runs at: uvicorn api:app --host 0.0.0.0 --port 8000
+ * Backend runs at: uvicorn backend.api:app --host 0.0.0.0 --port 8000
  * Configure VITE_API_BASE_URL in .env to override the default.
  *
  * Design: Industrial Precision — clean API abstraction layer

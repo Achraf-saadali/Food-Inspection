@@ -14,7 +14,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from schemas import (
+from backend.schemas import (
     Detection,
     ImageSize,
     InspectionItem,
@@ -23,7 +23,7 @@ from schemas import (
     QualityAssessment,
     RequiredAction,
 )
-from vlm_reasoning import VLMBackend
+from backend.vlm_reasoning import VLMBackend
 
 
 def crop_detection(image: np.ndarray, bbox_xyxy: List[float]) -> np.ndarray:
@@ -62,6 +62,7 @@ def run_inspection(
         class_id = int(box.cls[0])
         confidence = float(box.conf[0])
         bbox_xyxy = box.xyxy[0].tolist()
+        # Normalize coordinates so clients can render boxes at any image size.
         bbox_normalized = [
             bbox_xyxy[0] / w,
             bbox_xyxy[1] / h,
@@ -79,12 +80,13 @@ def run_inspection(
         )
 
         quality = None
+        # Gate VLM calls to control latency and external inference cost.
         if vlm_backend is not None and confidence >= vlm_confidence_gate:
             crop = crop_detection(image, bbox_xyxy)
             if crop.size > 0:
                 quality = vlm_backend.analyze(crop, label, confidence)
         
-        # Fallback to a "skipped" assessment if VLM didn't run
+        # Preserve a typed result when reasoning is disabled or gated out.
         if quality is None:
             quality = QualityAssessment(
                 status=InspectionStatus.SKIPPED,

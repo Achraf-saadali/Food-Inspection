@@ -5,7 +5,7 @@ FastAPI surface for the inspection pipeline.
     POST /inspect  -> YOLO detection + VLM quality reasoning (unified JSON)
 
 Run with:
-    uvicorn api:app --reload --port 8000
+    uvicorn backend.api:app --reload --port 8000
 
 This replaces the current local cv2.imshow loop with a request/response
 interface, per README Section 17 ("Integration Notes").
@@ -27,9 +27,9 @@ from fastapi import FastAPI, File, HTTPException, Query, UploadFile, BackgroundT
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 
-from inspection_pipeline import run_inspection
-from schemas import InspectionResult
-from vlm_reasoning import get_backend
+from backend.inspection_pipeline import run_inspection
+from backend.schemas import InspectionResult
+from backend.vlm_reasoning import get_backend
 
 load_dotenv()
 
