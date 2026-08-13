@@ -38,7 +38,8 @@ DEFAULT_MODEL_PATH = "models/best.pt"
 DEFAULT_CONF_THRESHOLD = 0.4
 DEFAULT_IOU_THRESHOLD = 0.5
 DEFAULT_VLM_CONF_GATE = 0.6
-VLM_REFRESH_SECONDS = 1.5
+TRACK_GRACE_SECONDS = 5.0
+CENTER_MATCH_DISTANCE = 1.5
 WAITING_EXPLANATION = "Waiting for VLM inspection."
 
 env_path = PROJECT_ROOT / ".env"
@@ -91,6 +92,7 @@ class FoodInspectionApp:
         self.frame_id = 0
         self._next_track_id = 0
         self._tracks: Dict[str, dict] = {}
+        self._matched_track_ids: set[str] = set()
         self._vlm_executor: Optional[ThreadPoolExecutor] = (
             ThreadPoolExecutor(max_workers=1, thread_name_prefix="vlm-inspection")
             if self.vlm_backend
@@ -127,18 +129,35 @@ class FoodInspectionApp:
         union = first_area + second_area - intersection
         return intersection / union if union > 0 else 0.0
 
+    @staticmethod
+    def _center_distance(first_bbox: List[float], second_bbox: List[float]) -> float:
+        """Measure centre movement relative to the item's visible box size."""
+        first_center = ((first_bbox[0] + first_bbox[2]) / 2, (first_bbox[1] + first_bbox[3]) / 2)
+        second_center = ((second_bbox[0] + second_bbox[2]) / 2, (second_bbox[1] + second_bbox[3]) / 2)
+        distance = ((first_center[0] - second_center[0]) ** 2 + (first_center[1] - second_center[1]) ** 2) ** 0.5
+        first_diagonal = ((first_bbox[2] - first_bbox[0]) ** 2 + (first_bbox[3] - first_bbox[1]) ** 2) ** 0.5
+        second_diagonal = ((second_bbox[2] - second_bbox[0]) ** 2 + (second_bbox[3] - second_bbox[1]) ** 2) ** 0.5
+        return distance / max((first_diagonal + second_diagonal) / 2, 1.0)
+
     def _match_track(self, label: str, bbox_xyxy: List[float]) -> str:
-        """Reuse recent quality work when the same labelled object remains visible."""
+        """Keep one VLM job/result attached to its moving detected item."""
         now = time.monotonic()
         best_track_id = None
-        best_overlap = 0.2
+        best_score = -1.0
         for track_id, track in self._tracks.items():
-            if track["label"] != label or now - track["last_seen"] > 3.0:
+            if track_id in self._matched_track_ids or track["label"] != label:
+                continue
+            if now - track["last_seen"] > TRACK_GRACE_SECONDS:
                 continue
             overlap = self._iou(bbox_xyxy, track["bbox_xyxy"])
-            if overlap > best_overlap:
+            center_distance = self._center_distance(bbox_xyxy, track["bbox_xyxy"])
+            if overlap < 0.05 and center_distance > CENTER_MATCH_DISTANCE:
+                continue
+            # Prefer strong overlap, while centre distance preserves the link during movement.
+            score = overlap + 0.2 * max(0.0, 1.0 - center_distance / CENTER_MATCH_DISTANCE)
+            if score > best_score:
                 best_track_id = track_id
-                best_overlap = overlap
+                best_score = score
 
         if best_track_id is None:
             self._next_track_id += 1
@@ -149,11 +168,11 @@ class FoodInspectionApp:
                 "last_seen": now,
                 "quality": None,
                 "future": None,
-                "last_vlm_at": 0.0,
             }
         else:
             self._tracks[best_track_id]["bbox_xyxy"] = bbox_xyxy
             self._tracks[best_track_id]["last_seen"] = now
+        self._matched_track_ids.add(best_track_id)
         return best_track_id
 
     def _collect_finished_inspections(self):
@@ -179,7 +198,11 @@ class FoodInspectionApp:
             track["quality"] = quality
 
         now = time.monotonic()
-        stale_tracks = [track_id for track_id, track in self._tracks.items() if now - track["last_seen"] > 5.0]
+        # Never discard a pending VLM job: its result remains available if the item reappears.
+        stale_tracks = [
+            track_id for track_id, track in self._tracks.items()
+            if now - track["last_seen"] > TRACK_GRACE_SECONDS and track.get("future") is None
+        ]
         for track_id in stale_tracks:
             self._tracks.pop(track_id, None)
 
@@ -222,14 +245,11 @@ class FoodInspectionApp:
         track_id = self._match_track(label, bbox_xyxy)
         track = self._tracks[track_id]
         future: Optional[Future] = track.get("future")
-        now = time.monotonic()
-
-        if future is None and (track["quality"] is None or now - track["last_vlm_at"] >= VLM_REFRESH_SECONDS):
+        if future is None and track["quality"] is None:
             crop = crop_detection(frame, bbox_xyxy).copy()
             if crop.size > 0:
-                # YOLO continues per frame while this single crop is inspected in the background.
+                # Submit once; the matching track keeps this waiting/result annotation attached.
                 track["future"] = self._vlm_executor.submit(self.vlm_backend.analyze, crop, label, confidence)
-                track["last_vlm_at"] = now
                 return self._waiting_quality()
 
         if track.get("future") is not None:
@@ -243,6 +263,8 @@ class FoodInspectionApp:
         height, width = frame.shape[:2]
         yolo_result = self.model.predict(frame, conf=self.conf, iou=self.iou, verbose=False)[0]
         items: List[InspectionItem] = []
+        # A live track may be assigned to only one same-label detection per frame.
+        self._matched_track_ids.clear()
 
         for box in yolo_result.boxes:
             class_id = int(box.cls[0])
