@@ -53,6 +53,25 @@ class VLMBackend(ABC):
 
     name: str = "base"
 
+    @staticmethod
+    def _extract_message_content(response) -> str:
+        """Validate provider output before JSON parsing so failures are visible."""
+        choices = getattr(response, "choices", None)
+        if not choices:
+            raise RuntimeError("VLM provider returned no completion choices.")
+        message = getattr(choices[0], "message", None)
+        content = getattr(message, "content", None) if message is not None else None
+        if isinstance(content, list):
+            content = "".join(
+                part.get("text", "") if isinstance(part, dict) else getattr(part, "text", "")
+                for part in content
+            )
+        if not isinstance(content, str) or not content.strip():
+            refusal = getattr(message, "refusal", None) if message is not None else None
+            detail = f" Refusal: {refusal}" if refusal else ""
+            raise RuntimeError(f"VLM provider returned an empty response.{detail}")
+        return content
+
     @abstractmethod
     def _call_model(self, crop: np.ndarray, prompt: str) -> str:
         """Send the crop + prompt to the model, return raw text response."""
@@ -188,7 +207,7 @@ class GPT4oBackend(VLMBackend):
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment or arguments.")
 
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, timeout=30.0, max_retries=0)
         self.model = model
 
     def _call_model(self, crop: np.ndarray, prompt: str) -> str:
@@ -217,7 +236,7 @@ class GPT4oBackend(VLMBackend):
             ],
             max_tokens=300,
         )
-        return response.choices[0].message.content
+        return self._extract_message_content(response)
 
 
 class QwenAPIBackend(VLMBackend):
@@ -238,7 +257,9 @@ class QwenAPIBackend(VLMBackend):
         # DashScope OpenAI-compatible endpoint
         self.client = OpenAI(
             api_key=api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            timeout=30.0,
+            max_retries=1,
         )
         self.model = model
 
@@ -268,7 +289,7 @@ class QwenAPIBackend(VLMBackend):
             ],
             max_tokens=300,
         )
-        return response.choices[0].message.content
+        return self._extract_message_content(response)
 
 
 class OpenRouterBackend(VLMBackend):
@@ -287,6 +308,8 @@ class OpenRouterBackend(VLMBackend):
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
+            timeout=30.0,
+            max_retries=1,
         )
         self.model = model
 
@@ -315,16 +338,18 @@ class OpenRouterBackend(VLMBackend):
             ],
             max_tokens=300,
         )
-        return response.choices[0].message.content
+        return self._extract_message_content(response)
 
 
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
-    """Factory so the pipeline/API can select a backend by string flag.
-    
-    Runtime currently routes all requests through OpenRouter, regardless of name.
-    """
-    kwargs = {}
-    if model:
-        kwargs["model"] = model
-    
-    return OpenRouterBackend(**kwargs)
+    """Create the requested provider instead of silently routing to another one."""
+    normalized_name = name.lower().strip()
+    if normalized_name in {"gpt4o", "openai"}:
+        return GPT4oBackend(model=model or "gpt-4o")
+    if normalized_name == "qwen-api":
+        return QwenAPIBackend(model=model or "qwen-vl-max")
+    if normalized_name == "qwen":
+        return Qwen25VLBackend(model_id=model or "Qwen/Qwen2.5-VL-3B-Instruct")
+    if normalized_name == "openrouter":
+        return OpenRouterBackend(model=model or "google/gemini-flash-1.5-8b")
+    raise ValueError(f"Unsupported VLM backend: {name}")

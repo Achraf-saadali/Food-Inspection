@@ -40,6 +40,7 @@ DEFAULT_IOU_THRESHOLD = 0.5
 DEFAULT_VLM_CONF_GATE = 0.6
 TRACK_GRACE_SECONDS = 5.0
 CENTER_MATCH_DISTANCE = 1.5
+VLM_RESULT_TIMEOUT_SECONDS = 40.0
 WAITING_EXPLANATION = "Waiting for VLM inspection."
 
 env_path = PROJECT_ROOT / ".env"
@@ -168,6 +169,8 @@ class FoodInspectionApp:
                 "last_seen": now,
                 "quality": None,
                 "future": None,
+                "future_started_at": None,
+                "timed_out": False,
             }
         else:
             self._tracks[best_track_id]["bbox_xyxy"] = bbox_xyxy
@@ -179,9 +182,26 @@ class FoodInspectionApp:
         """Promote completed background VLM calls into displayable quality results."""
         for track in self._tracks.values():
             future: Optional[Future] = track.get("future")
-            if future is None or not future.done():
+            if future is None:
+                continue
+            if not future.done():
+                started_at = track.get("future_started_at") or time.monotonic()
+                if time.monotonic() - started_at >= VLM_RESULT_TIMEOUT_SECONDS and not track.get("timed_out"):
+                    track["timed_out"] = True
+                    track["quality"] = QualityAssessment(
+                        status=InspectionStatus.UNCERTAIN,
+                        overall_quality_score=None,
+                        quality_metrics={},
+                        defects=[],
+                        explanation="VLM inspection timed out; manual review is required.",
+                        required_action=RequiredAction.FLAG_FOR_REVIEW,
+                        vlm_backend=self.vlm_backend.name if self.vlm_backend else "none",
+                    )
+                    track["quality"].commentary = build_quality_commentary(track["label"], track["quality"])
                 continue
             track["future"] = None
+            track["future_started_at"] = None
+            track["timed_out"] = False
             try:
                 quality = future.result()
             except Exception as exc:  # Defensive fallback keeps the camera loop running.
@@ -250,10 +270,12 @@ class FoodInspectionApp:
             if crop.size > 0:
                 # Submit once; the matching track keeps this waiting/result annotation attached.
                 track["future"] = self._vlm_executor.submit(self.vlm_backend.analyze, crop, label, confidence)
+                track["future_started_at"] = time.monotonic()
+                track["timed_out"] = False
                 return self._waiting_quality()
 
         if track.get("future") is not None:
-            return self._waiting_quality()
+            return track["quality"] if track.get("timed_out") and track.get("quality") else self._waiting_quality()
         if track.get("quality") is not None:
             return track["quality"]
         return self._waiting_quality()
