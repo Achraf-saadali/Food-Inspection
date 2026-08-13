@@ -94,10 +94,9 @@ class FoodInspectionApp:
         self._next_track_id = 0
         self._tracks: Dict[str, dict] = {}
         self._matched_track_ids: set[str] = set()
+        self._executor_generation = 0
         self._vlm_executor: Optional[ThreadPoolExecutor] = (
-            ThreadPoolExecutor(max_workers=1, thread_name_prefix="vlm-inspection")
-            if self.vlm_backend
-            else None
+            self._new_vlm_executor() if self.vlm_backend else None
         )
 
         SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -114,6 +113,19 @@ class FoodInspectionApp:
             raise RuntimeError(f"Could not open video source: {source}")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    def _new_vlm_executor(self) -> ThreadPoolExecutor:
+        """Create one serial VLM worker for the current live-inspection session."""
+        return ThreadPoolExecutor(max_workers=1, thread_name_prefix="vlm-inspection")
+
+    def _recover_vlm_executor(self) -> None:
+        """Isolate a stalled provider call so later items are not trapped behind it."""
+        previous_executor = self._vlm_executor
+        if previous_executor is not None:
+            previous_executor.shutdown(wait=False, cancel_futures=True)
+        self._executor_generation += 1
+        self._vlm_executor = self._new_vlm_executor()
+        print("[WARN] Replaced stalled VLM worker; new inspections can continue.")
 
     @staticmethod
     def _iou(first_bbox: List[float], second_bbox: List[float]) -> float:
@@ -171,6 +183,7 @@ class FoodInspectionApp:
                 "future": None,
                 "future_started_at": None,
                 "timed_out": False,
+                "executor_generation": self._executor_generation,
             }
         else:
             self._tracks[best_track_id]["bbox_xyxy"] = bbox_xyxy
@@ -198,6 +211,10 @@ class FoodInspectionApp:
                         vlm_backend=self.vlm_backend.name if self.vlm_backend else "none",
                     )
                     track["quality"].commentary = build_quality_commentary(track["label"], track["quality"])
+                    # A running request cannot be force-killed, so retire its worker.
+                    # The replacement executor prevents future items from queuing behind it.
+                    if track.get("executor_generation") == self._executor_generation:
+                        self._recover_vlm_executor()
                 continue
             track["future"] = None
             track["future_started_at"] = None
@@ -272,6 +289,8 @@ class FoodInspectionApp:
                 track["future"] = self._vlm_executor.submit(self.vlm_backend.analyze, crop, label, confidence)
                 track["future_started_at"] = time.monotonic()
                 track["timed_out"] = False
+                track["executor_generation"] = self._executor_generation
+                print(f"[VLM] Queued inspection for {label} on worker {self._executor_generation}.")
                 return self._waiting_quality()
 
         if track.get("future") is not None:
