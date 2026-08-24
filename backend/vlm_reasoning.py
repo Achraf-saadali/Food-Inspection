@@ -292,6 +292,84 @@ class QwenAPIBackend(VLMBackend):
         return self._extract_message_content(response)
 
 
+class GemmaAPIBackend(VLMBackend):
+    """Hosted Gemma 4 vision through the Gemini API.
+
+    The provider uses Google's native generateContent endpoint because the
+    hosted Gemma image guide documents that interface directly. Set
+    ``GEMINI_API_KEY`` and optionally ``GEMMA_API_BASE_URL``.
+    """
+
+    name = "gemma-api"
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemma-4-26b-a4b-it"):
+        import os
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMMA_API_KEY")
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY or GEMMA_API_KEY not found in environment.")
+        self.base_url = os.getenv("GEMMA_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        self.model = model
+
+    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
+        import base64
+        import cv2
+        import requests
+
+        ok, buf = cv2.imencode(".jpg", crop)
+        if not ok:
+            raise RuntimeError("Failed to encode crop as JPEG")
+        response = requests.post(
+            f"{self.base_url}/models/{self.model}:generateContent",
+            params={"key": self.api_key},
+            json={
+                "contents": [{"parts": [
+                    {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(buf).decode("utf-8")}},
+                    {"text": prompt},
+                ]}],
+                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 300},
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload["candidates"][0]["content"]["parts"][0]["text"]
+
+
+class NVIDIAAPIBackend(VLMBackend):
+    """NVIDIA-hosted or self-hosted NIM VLM through OpenAI compatibility."""
+
+    name = "nvidia-api"
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        import os
+        from openai import OpenAI
+
+        api_key = api_key or os.getenv("NVIDIA_API_KEY")
+        if not api_key:
+            raise ValueError("NVIDIA_API_KEY not found in environment.")
+        base_url = os.getenv("NVIDIA_API_BASE_URL", "https://integrate.api.nvidia.com/v1")
+        self.model = model or os.getenv("NVIDIA_VLM_MODEL", "nvidia/nemotron-nano-12b-v2-vl")
+        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0, max_retries=1)
+
+    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
+        import base64
+        import cv2
+
+        ok, buf = cv2.imencode(".jpg", crop)
+        if not ok:
+            raise RuntimeError("Failed to encode crop as JPEG")
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(buf).decode('utf-8')}"}},
+            ]}],
+            temperature=0.0,
+            max_tokens=300,
+        )
+        return self._extract_message_content(response)
+
+
 class OpenRouterBackend(VLMBackend):
     """API-based inference via OpenRouter."""
 
@@ -350,6 +428,10 @@ def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
         return QwenAPIBackend(model=model or "qwen-vl-max")
     if normalized_name == "qwen":
         return Qwen25VLBackend(model_id=model or "Qwen/Qwen2.5-VL-3B-Instruct")
+    if normalized_name in {"gemma", "gemma-api", "google-gemma"}:
+        return GemmaAPIBackend(model=model or "gemma-4-26b-a4b-it")
+    if normalized_name in {"nvidia", "nvidia-api", "nim"}:
+        return NVIDIAAPIBackend(model=model)
     if normalized_name == "openrouter":
         return OpenRouterBackend(model=model or "google/gemini-flash-1.5-8b")
     raise ValueError(f"Unsupported VLM backend: {name}")

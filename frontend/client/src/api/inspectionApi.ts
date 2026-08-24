@@ -18,7 +18,7 @@ export async function detectImage(file: File): Promise<InspectionResult> {
 
 export async function submitInspectJob(
   file: File,
-  options?: { confidence_gate?: number }
+  options?: { confidence_gate?: number; vlm_backend?: string; vlm_model?: string }
 ): Promise<{ job_id: string; status: string }> {
   const form = new FormData();
   form.append('file', file);
@@ -26,6 +26,8 @@ export async function submitInspectJob(
   if (options?.confidence_gate !== undefined) {
     params.set('confidence_gate', String(options.confidence_gate));
   }
+  if (options?.vlm_backend) params.set('vlm_backend', options.vlm_backend);
+  if (options?.vlm_model) params.set('vlm_model', options.vlm_model);
   const { data } = await apiClient.post<{ job_id: string; status: string }>(
     `/inspect?${params.toString()}`,
     form,
@@ -46,7 +48,7 @@ export async function pollInspectStatus(jobId: string): Promise<{
 /** Submit a full inspection and poll until the persisted result is ready. */
 export async function inspectImage(
   file: File,
-  options?: { confidence_gate?: number },
+  options?: { confidence_gate?: number; vlm_backend?: string; vlm_model?: string },
   onProgress?: (stage: string) => void
 ): Promise<InspectionResult> {
   onProgress?.('Uploading image...');

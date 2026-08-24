@@ -39,6 +39,7 @@ from backend.database import (
     save_uploaded_image,
 )
 from backend.inspection_pipeline import run_inspection
+from backend.reporting import build_farmer_report
 from backend.schemas import InspectionResult, InspectionStatus
 from backend.vlm_reasoning import get_backend
 
@@ -106,6 +107,7 @@ def process_inspection_job(
     filename: str,
     image_path: str,
     vlm_backend_name: str,
+    vlm_model: str | None,
     confidence_gate: float,
 ):
     global _frame_counter
@@ -116,7 +118,7 @@ def process_inspection_job(
     try:
         start_time = time.perf_counter()
         _frame_counter += 1
-        backend = get_vlm_backend(vlm_backend_name)
+        backend = get_backend(vlm_backend_name, model=vlm_model)
         
         print(f"[API] Processing job {job_id} for {filename} (Frame {_frame_counter})")
         
@@ -146,9 +148,14 @@ async def inspect(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     confidence_gate: float = Query(default=0.4, ge=0.0, le=1.0),
+    vlm_backend: str = Query(default="openrouter"),
+    vlm_model: str | None = Query(default=None),
 ):
     """Async Detection + VLM reasoning endpoint. Returns a job_id.
-    Note: The VLM backend is now hardcoded to OpenRouter in backend/vlm_reasoning.py.
+
+    The detection, prompt, VLM parsing, commentary, and schema are shared with
+    the live CLI runner. The provider is selected per request so experiments
+    can compare backends without changing application logic.
     """
     raw_bytes = await file.read()
     image = _decode_upload(raw_bytes)
@@ -163,7 +170,8 @@ async def inspect(
         image=image,
         filename=file.filename or "upload",
         image_path=image_path,
-        vlm_backend_name="openrouter",
+        vlm_backend_name=vlm_backend,
+        vlm_model=vlm_model,
         confidence_gate=confidence_gate
     )
     
@@ -207,6 +215,14 @@ async def reports_export() -> list[dict]:
     return export_reports()
 
 
+@app.get("/reports/{report_id}/farmer-report")
+async def farmer_report_detail(report_id: str) -> dict:
+    report = get_report(report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {"inspection": report.model_dump(mode="json"), "farmer_report": build_farmer_report(report)}
+
+
 @app.get("/reports/{report_id}", response_model=InspectionResult)
 async def report_detail(report_id: str) -> InspectionResult:
     report = get_report(report_id)
@@ -234,7 +250,7 @@ async def model_info() -> dict:
         "map50": float(final_metrics.get("metrics/mAP50(B)", 0)) * 100,
         "precision": float(final_metrics.get("metrics/precision(B)", 0)) * 100,
         "recall": float(final_metrics.get("metrics/recall(B)", 0)) * 100,
-        "vlm_backends": ["OpenRouter (runtime)"],
+        "vlm_backends": ["openrouter", "gemma-api", "nvidia-api"],
     }
 
 
