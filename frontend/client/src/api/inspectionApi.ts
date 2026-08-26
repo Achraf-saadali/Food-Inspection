@@ -10,9 +10,8 @@ import apiClient from './client';
 export async function detectImage(file: File): Promise<InspectionResult> {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await apiClient.post<InspectionResult>('/detect', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // Do not set Content-Type manually: the browser adds the multipart boundary.
+  const { data } = await apiClient.post<InspectionResult>('/detect', form);
   return data;
 }
 
@@ -30,8 +29,7 @@ export async function submitInspectJob(
   if (options?.vlm_model) params.set('vlm_model', options.vlm_model);
   const { data } = await apiClient.post<{ job_id: string; status: string }>(
     `/inspect?${params.toString()}`,
-    form,
-    { headers: { 'Content-Type': 'multipart/form-data' } }
+    form
   );
   return data;
 }
