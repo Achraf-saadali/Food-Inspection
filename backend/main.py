@@ -457,30 +457,34 @@ def main():
     parser.add_argument("--source", default="0", help="Webcam index or video file")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF_THRESHOLD, help="YOLO confidence")
     parser.add_argument("--iou", type=float, default=DEFAULT_IOU_THRESHOLD, help="YOLO IoU threshold")
-    parser.add_argument("--vlm", choices=["gpt4o", "openai", "qwen", "qwen-api", "openrouter"], help="Enable VLM reasoning backend")
+    parser.add_argument(
+        "--vlm",
+        choices=["gpt4vlm", "gpt4o", "openai", "gemini", "gemini-api", "openrouter", "gemma", "gemma-api", "qwen", "qwen-api", "nvidia", "nvidia-api"],
+        help="Enable VLM reasoning backend; defaults to OpenRouter when its key is available.",
+    )
     parser.add_argument("--vlm-model", help="Specific model ID to use with the VLM backend")
     parser.add_argument("--vlm-conf", type=float, default=DEFAULT_VLM_CONF_GATE, help="VLM confidence gate")
     args = parser.parse_args()
 
     openai_key = os.getenv("OPENAI_API_KEY")
-    qwen_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GEMMA_API_KEY")
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
     if args.vlm is None:
-        if openai_key:
-            print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm openai")
-            args.vlm = "openai"
-        elif qwen_key:
-            print("[INFO] QWEN_API_KEY/DASHSCOPE_API_KEY detected. Defaulting to --vlm qwen-api")
-            args.vlm = "qwen-api"
-        elif openrouter_key:
+        if openrouter_key:
             print("[INFO] OPENROUTER_API_KEY detected. Defaulting to --vlm openrouter")
             args.vlm = "openrouter"
+        elif openai_key:
+            print("[INFO] OPENAI_API_KEY detected. Defaulting to --vlm openai")
+            args.vlm = "openai"
+        elif gemini_key:
+            print("[INFO] GEMINI_API_KEY/GEMMA_API_KEY detected. Defaulting to --vlm gemini")
+            args.vlm = "gemini"
 
     if args.vlm in ["gpt4o", "openai"] and not openai_key:
         print(f"[ERROR] --vlm {args.vlm} requested but OPENAI_API_KEY is not set.")
-    elif args.vlm == "qwen-api" and not qwen_key:
-        print(f"[ERROR] --vlm {args.vlm} requested but QWEN_API_KEY or DASHSCOPE_API_KEY is not set.")
-    elif args.vlm == "openrouter" and not openrouter_key:
+    elif args.vlm in {"gemini", "gemini-api"} and not gemini_key:
+        print(f"[ERROR] --vlm {args.vlm} requested but GEMINI_API_KEY or GEMMA_API_KEY is not set.")
+    elif args.vlm in {"openrouter", "gemma", "gemma-api", "qwen", "qwen-api", "nvidia", "nvidia-api"} and not openrouter_key:
         print(f"[ERROR] --vlm {args.vlm} requested but OPENROUTER_API_KEY is not set.")
 
     app = FoodInspectionApp(

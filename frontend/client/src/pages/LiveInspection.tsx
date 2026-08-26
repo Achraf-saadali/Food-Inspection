@@ -168,7 +168,7 @@ export default function LiveInspection() {
               <div>
                 <label className="text-xs text-muted-foreground mb-2 block">VLM Backend</label>
                 <div className="w-full py-2 px-3 rounded border border-border bg-secondary/50 text-xs font-mono text-muted-foreground">
-                  OpenRouter (Gemini Flash)
+                  OpenRouter (Gemma 4 31B)
                 </div>
               </div>
             )}
