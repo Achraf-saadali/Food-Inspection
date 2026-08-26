@@ -2,8 +2,8 @@
 VLM reasoning stage.
 
 Provides a backend-agnostic interface so the pipeline can call
-`backend.analyze(crop, label, confidence)` without knowing whether the
-underlying model is Qwen2.5-VL (local) or GPT-4o (API).
+`backend.analyze(crop, label, confidence)` without knowing which hosted
+provider is used.
 
 Both backends are expected to return a QualityAssessment. Model calls are
 wrapped in structured-output parsing with a fallback to an UNCERTAIN status
@@ -26,6 +26,9 @@ from backend.schemas import InspectionStatus, QualityAssessment, RequiredAction
 
 # Ensure environment variables are loaded
 load_dotenv()
+
+# Production quality reasoning is intentionally routed through OpenRouter.
+ACTIVE_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
 
 QUALITY_PROMPT_TEMPLATE = """You are inspecting a food item detected by an object \
 detector as "{label}" (detector confidence: {confidence:.2f}).
@@ -152,47 +155,7 @@ class VLMBackend(ABC):
         )
 
 
-class Qwen25VLBackend(VLMBackend):
-    """Local inference via Qwen2.5-VL. Loads the model once and reuses it
-    across calls -- construct one instance per process, not per request."""
-
-    name = "qwen2.5-vl"
-
-    def __init__(self, model_id: str = "Qwen/Qwen2.5-VL-3B-Instruct", device: str = "cuda"):
-        # Imports are deferred so this module doesn't hard-require
-        # transformers/torch just to import schemas or other backends.
-        from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
-
-        self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype="auto", device_map=device
-        )
-        self.processor = AutoProcessor.from_pretrained(model_id)
-
-    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
-        from PIL import Image
-
-        image = Image.fromarray(crop[:, :, ::-1])  # BGR (cv2) -> RGB
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": image},
-                    {"type": "text", "text": prompt},
-                ],
-            }
-        ]
-        text_prompt = self.processor.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-        inputs = self.processor(text=[text_prompt], images=[image], return_tensors="pt").to(
-            self.model.device
-        )
-        output_ids = self.model.generate(**inputs, max_new_tokens=256)
-        generated = output_ids[:, inputs["input_ids"].shape[1] :]
-        return self.processor.batch_decode(generated, skip_special_tokens=True)[0]
-
-
-class GPT4oBackend(VLMBackend):
+class GPT4VLMBackend(VLMBackend):
     """API-based inference via GPT-4o vision. Used as the high-accuracy
     reference model, per the benchmark rationale in the README."""
 
@@ -239,60 +202,7 @@ class GPT4oBackend(VLMBackend):
         return self._extract_message_content(response)
 
 
-class QwenAPIBackend(VLMBackend):
-    """API-based inference via Qwen-VL (DashScope)."""
-
-    name = "qwen-api"
-
-    def __init__(self, api_key: Optional[str] = None, model: str = "qwen-vl-max"):
-        import os
-
-        from openai import OpenAI
-
-        # Qwen API key can be stored in DASHSCOPE_API_KEY or QWEN_API_KEY
-        api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
-        if not api_key:
-            raise ValueError("QWEN_API_KEY or DASHSCOPE_API_KEY not found in environment.")
-
-        # DashScope OpenAI-compatible endpoint
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            timeout=30.0,
-            max_retries=1,
-        )
-        self.model = model
-
-    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
-        import base64
-
-        import cv2
-
-        ok, buf = cv2.imencode(".jpg", crop)
-        if not ok:
-            raise RuntimeError("Failed to encode crop as JPEG")
-        b64_image = base64.b64encode(buf).decode("utf-8")
-
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"},
-                        },
-                    ],
-                }
-            ],
-            max_tokens=300,
-        )
-        return self._extract_message_content(response)
-
-
-class GemmaAPIBackend(VLMBackend):
+class GeminiVLMBackend(VLMBackend):
     """Hosted Gemma 4 vision through the Gemini API.
 
     The provider uses Google's native generateContent endpoint because the
@@ -335,47 +245,15 @@ class GemmaAPIBackend(VLMBackend):
         return payload["candidates"][0]["content"]["parts"][0]["text"]
 
 
-class NVIDIAAPIBackend(VLMBackend):
-    """NVIDIA-hosted or self-hosted NIM VLM through OpenAI compatibility."""
-
-    name = "nvidia-api"
-
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        import os
-        from openai import OpenAI
-
-        api_key = api_key or os.getenv("NVIDIA_API_KEY")
-        if not api_key:
-            raise ValueError("NVIDIA_API_KEY not found in environment.")
-        base_url = os.getenv("NVIDIA_API_BASE_URL", "https://integrate.api.nvidia.com/v1")
-        self.model = model or os.getenv("NVIDIA_VLM_MODEL", "nvidia/nemotron-nano-12b-v2-vl")
-        self.client = OpenAI(api_key=api_key, base_url=base_url, timeout=30.0, max_retries=1)
-
-    def _call_model(self, crop: np.ndarray, prompt: str) -> str:
-        import base64
-        import cv2
-
-        ok, buf = cv2.imencode(".jpg", crop)
-        if not ok:
-            raise RuntimeError("Failed to encode crop as JPEG")
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64.b64encode(buf).decode('utf-8')}"}},
-            ]}],
-            temperature=0.0,
-            max_tokens=300,
-        )
-        return self._extract_message_content(response)
-
-
 class OpenRouterBackend(VLMBackend):
-    """API-based inference via OpenRouter."""
+    # The model can be switched to:
+    # - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+    # - google/gemma-4-31b-it:free
+    """Single OpenRouter implementation for the approved hosted VLM models."""
 
     name = "openrouter"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "google/gemini-flash-1.5-8b"):
+    def __init__(self, api_key: Optional[str] = None, model: str = ACTIVE_OPENROUTER_MODEL):
         import os
         from openai import OpenAI
 
@@ -420,18 +298,20 @@ class OpenRouterBackend(VLMBackend):
 
 
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
-    """Create the requested provider instead of silently routing to another one."""
+    """Create a VLM backend while consolidating hosted alternatives on OpenRouter.
+
+    GPT-4 Vision and Gemini remain dedicated classes. Historical Qwen, Gemma,
+    NVIDIA, and OpenRouter names are accepted for CLI/API compatibility but all
+    use the same OpenRouter implementation and OPENROUTER_API_KEY.
+    """
     normalized_name = name.lower().strip()
-    if normalized_name in {"gpt4o", "openai"}:
-        return GPT4oBackend(model=model or "gpt-4o")
-    if normalized_name == "qwen-api":
-        return QwenAPIBackend(model=model or "qwen-vl-max")
-    if normalized_name == "qwen":
-        return Qwen25VLBackend(model_id=model or "Qwen/Qwen2.5-VL-3B-Instruct")
-    if normalized_name in {"gemma", "gemma-api", "google-gemma"}:
-        return GemmaAPIBackend(model=model or "gemma-4-26b-a4b-it")
-    if normalized_name in {"nvidia", "nvidia-api", "nim"}:
-        return NVIDIAAPIBackend(model=model)
-    if normalized_name == "openrouter":
-        return OpenRouterBackend(model=model or "google/gemini-flash-1.5-8b")
+    if normalized_name in {"gpt4o", "gpt4vlm", "openai"}:
+        return GPT4VLMBackend(model=model or "gpt-4o")
+    if normalized_name in {"gemini", "gemini-api"}:
+        return GeminiVLMBackend(model=model or "gemma-4-26b-a4b-it")
+    if normalized_name in {
+        "openrouter", "gemma", "gemma-api", "google-gemma",
+        "qwen", "qwen-api", "nvidia", "nvidia-api", "nim",
+    }:
+        return OpenRouterBackend(model=model or ACTIVE_OPENROUTER_MODEL)
     raise ValueError(f"Unsupported VLM backend: {name}")

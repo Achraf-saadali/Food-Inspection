@@ -250,7 +250,7 @@ async def model_info() -> dict:
         "map50": float(final_metrics.get("metrics/mAP50(B)", 0)) * 100,
         "precision": float(final_metrics.get("metrics/precision(B)", 0)) * 100,
         "recall": float(final_metrics.get("metrics/recall(B)", 0)) * 100,
-        "vlm_backends": ["openrouter", "gemma-api", "nvidia-api"],
+        "vlm_backends": ["openrouter", "gpt4vlm", "gemini"],
     }
 
 
