@@ -2,6 +2,14 @@
 
 Food Inspection AI is a two-stage computer-vision system for detecting food ingredients and assessing their visible quality. The repository combines a YOLO-based object detector, optional vision-language reasoning, a FastAPI service, a React/TypeScript dashboard, training artifacts, and saved inspection outputs.
 
+## System architecture
+
+The following architecture diagram shows the implemented end-to-end system, including the web and CLI interfaces, FastAPI orchestration, shared YOLO and VLM inspection pipeline, asynchronous reasoning, persistence, reports, external VLM providers, and the two training experiments.
+
+![Food Inspection AI end-to-end system architecture](docs/assets/architecture.png)
+
+*Figure 1. Food Inspection AI end-to-end system architecture.*
+
 The documentation below describes the **implemented repository**, not an idealized future architecture. Where a dataset split, class list, or metric is not directly reproducible from the files committed here, that limitation is stated explicitly.
 
 ## System at a glance
