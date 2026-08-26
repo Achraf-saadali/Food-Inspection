@@ -308,7 +308,7 @@ class GemmaAPIBackend(VLMBackend):
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY or GEMMA_API_KEY not found in environment.")
         self.base_url = os.getenv("GEMMA_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-        self.model = model
+        self.model = "google/gemma-4-31b-it:free"
 
     def _call_model(self, crop: np.ndarray, prompt: str) -> str:
         import base64
