@@ -92,39 +92,39 @@ All existing artifacts were retained during restructuring. The spelling of the f
 
 ## Machine-learning training record
 
-The committed Ultralytics run is `training/runs/train4`. Its configuration records a pretrained YOLOv9c model, 30 epochs, batch size 8, 640px input images, automatic optimizer selection, an initial learning rate of `0.001`, deterministic seed `0`, validation enabled with `split: val`, and eight workers. The training configuration references `/kaggle/input/newdata3/data (5).yaml`; that dataset YAML and the raw images are not committed, so the exact source manifest and split cardinalities cannot be independently reconstructed from this repository alone.
+The repository now uses the second experiment, `lvis_fruits_yolo11m_80_v1`, as its canonical training pipeline. The notebook in `training/notebooks/food_detection.ipynb` replaces the original ad-hoc YOLOv9c/30-epoch workflow with a reproducible YOLO11m pipeline that copies the dataset to writable local storage, audits labels before training, removes the two case-duplicate classes (`Strawberry` and `Tomato`), remaps the remaining taxonomy to 61 contiguous classes, and checks for train/validation overlap.
 
-The configuration records the following augmentation and loss-related settings. These are **training configuration values**, not claims that every transform was separately ablated.
-
-| Group | Recorded values |
+| Group | Integrated values |
 |---|---|
-| Input and schedule | `imgsz=640`, `epochs=30`, `batch=8`, `optimizer=auto`, `lr0=0.001`, `lrf=0.01` |
-| Reproducibility | `seed=0`, `deterministic=true`, `pretrained=true` |
-| Geometric/color augmentation | `hsv_h=0.015`, `hsv_s=0.7`, `hsv_v=0.4`, `translate=0.1`, `scale=0.5`, `fliplr=0.5` |
-| Composite augmentation | `mosaic=1.0`, `auto_augment=randaugment`, `erasing=0.4` |
+| Architecture and schedule | pretrained `yolo11m.pt`, `epochs=80`, `imgsz=640`, `batch=-1` automatic GPU sizing |
+| Optimizer and learning rate | `AdamW`, `lr0=0.000149`, `momentum=0.9`, `weight_decay=0.0005`, `lrf=0.01` |
+| Training control | `patience=20`, `warmup_epochs=3`, `cos_lr=true`, `close_mosaic=10`, `amp=true`, `cache=disk`, `workers=2` |
+| Reproducibility | `seed=0`, `deterministic=true`, pretrained initialization |
 | YOLO loss weights | `box=7.5`, `cls=0.5`, `dfl=1.5` |
-| Validation/NMS-related settings | `val=true`, `split=val`, `iou=0.7`, `max_det=300` |
+| Dataset processing | 63-class source taxonomy reduced to 61 classes; images containing dropped classes or no remaining annotations are removed |
+| Checkpointing | `best.pt`, `last.pt`, and immutable epoch checkpoints every five epochs |
 
-The loss columns in `training/runs/train4/results.csv` are `train/box_loss`, `train/cls_loss`, `train/dfl_loss` and their validation counterparts. The run finished with training losses of `0.94468`, `0.82967`, and `1.02246`, and validation losses of `0.98956`, `1.29326`, and `1.06861`, respectively.
+The processed dataset audit records 4,707 training images with 119,422 instances and 1,532 validation images with 33,695 instances. The dataset YAML, audit manifest, class distribution, training configuration, and epoch metrics are retained under `training/data/lvis_fruits_61class/` and `training/runs/lvis_fruits_yolo11m_80_v1/`. The raw dataset remains external and is not committed.
 
-### Recorded detection metrics
+### Experiment comparison
 
-The final epoch is not automatically the best epoch for every metric. The table therefore separates the final recorded values from the best values found in the 30-row CSV.
+The second experiment is the more relevant engineering baseline because it uses a larger YOLO11m backbone, a longer controlled schedule, explicit AdamW settings, cosine learning-rate decay, automatic batch sizing, writable disk caching, label validation, duplicate-class remediation, overlap checks, and periodic checkpoint persistence. It is not a clean isolated hyperparameter ablation because the architecture, dataset taxonomy, number of images, and schedule changed together.
 
-| Metric | Epoch 1 | Final epoch 30 | Best recorded value |
+| Metric | Experiment 1: YOLOv9c, 30 epochs | Experiment 2: YOLO11m, cleaned 61 classes, 80 epochs | Difference in best recorded value |
 |---|---:|---:|---:|
-| Precision (B) | 0.41639 | 0.34298 | 0.45554 at epoch 2 |
-| Recall (B) | 0.11586 | 0.25250 | 0.26704 at epoch 26 |
-| mAP@50 (B) | 0.08660 | 0.23750 | 0.23750 at epoch 30 |
-| mAP@50–95 (B) | 0.06087 | 0.17418 | 0.17418 at epoch 30 |
+| Best precision (B) | 0.46271 | 0.40785 | −0.05486 |
+| Best recall (B) | 0.26704 | 0.26546 | −0.00158 |
+| Best mAP@50 (B) | 0.23750 | 0.24364 | +0.00614 |
+| Best mAP@50–95 (B) | 0.17418 | 0.17677 | +0.00259 |
 
-The metrics above are the values recorded by Ultralytics in `results.csv`; they should not be interpreted as a complete production benchmark. The repository does not contain the dataset YAML, a locked evaluation protocol, hardware-independent latency benchmark, or class-by-class validation table.
+The second run’s best recorded validation metrics occurred around logged epoch 60, while its final epoch-80 metrics declined to mAP@50 `0.23402` and mAP@50–95 `0.16956`. Therefore the application should use `best.pt`, not `last.pt`, and the comparison should not claim uniform improvement on every metric. The two experiments also use different effective class spaces and splits, so the metric deltas are directional evidence rather than a controlled scientific attribution.
 
-The training artifacts include `results.png`, precision/recall/F1/PR curves, normalized and unnormalized confusion matrices, label visualizations, train batches, validation labels/predictions, `predictions.json`, and `weights/best.pt` plus `weights/last.pt`. The runtime application uses the separate copy at `models/best.pt`.
+### Runtime model and reproducibility
 
-### Split and stratification status
+The runtime application now reports the second experiment’s metadata through `/model-info` and loads the integrated YOLO11m `models/best.pt` checkpoint. The checkpoint is tracked with Git LFS because it is approximately 116 MB. The training notebook is configured for a fresh run by default; interrupted runs must use the same experiment identity and `resume_interrupted` mode with the corresponding `last.pt`, while a completed checkpoint followed by new training must use `extend_completed` and a new experiment identity.
 
-The run records `split: val`, which indicates that Ultralytics evaluated the validation split. It does **not** prove that the split was stratified. No committed manifest states the train/validation/test counts, the class distribution in each split, whether the split was predefined, or whether duplicate images were removed across splits. The README therefore avoids claiming stratification or a particular split percentage.
+The metrics above are the values recorded by Ultralytics in `results.csv`; they are not a substitute for a final independent test benchmark. A production evaluation should still include a locked held-out test split, per-class AP, confidence-threshold analysis, duplicate/near-duplicate checks across splits, and hardware-specific latency measurements.
+
 
 ## Detection and quality contracts
 

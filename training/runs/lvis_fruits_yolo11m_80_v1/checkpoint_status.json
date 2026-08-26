@@ -1,0 +1,15 @@
+{
+  "saved_utc": "2026-08-24T20:41:57.915745+00:00",
+  "completed_epoch_index": 79,
+  "checkpoint_files": [
+    "best.pt",
+    "epoch50.pt",
+    "epoch55.pt",
+    "epoch60.pt",
+    "epoch65.pt",
+    "epoch70.pt",
+    "epoch75.pt",
+    "last.pt"
+  ],
+  "local_run": "/content/yolo_runs/lvis_fruits_yolo11m_80_v1"
+}

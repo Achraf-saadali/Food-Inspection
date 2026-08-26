@@ -59,8 +59,8 @@ app.add_middleware(
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = str(PROJECT_ROOT / "models" / "best.pt")
-TRAINING_ARGS_PATH = PROJECT_ROOT / "training" / "runs" / "train4" / "args.yaml"
-TRAINING_RESULTS_PATH = PROJECT_ROOT / "training" / "runs" / "train4" / "results.csv"
+TRAINING_ARGS_PATH = PROJECT_ROOT / "training" / "runs" / "lvis_fruits_yolo11m_80_v1" / "args.yaml"
+TRAINING_RESULTS_PATH = PROJECT_ROOT / "training" / "runs" / "lvis_fruits_yolo11m_80_v1" / "results.csv"
 _frame_counter = 0
 
 # In-memory job store for async inspection
@@ -241,7 +241,7 @@ async def model_info() -> dict:
     model = get_yolo_model()
     return {
         "name": "Food Inspection YOLO Detector",
-        "version": "train4",
+        "version": "lvis_fruits_yolo11m_80_v1",
         "architecture": str(training_args.get("model", "YOLO detector")),
         "num_classes": len(model.names),
         "class_names": [str(name) for _, name in sorted(model.names.items())],

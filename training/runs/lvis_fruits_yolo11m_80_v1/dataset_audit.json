@@ -1,0 +1,32 @@
+{
+  "experiment": "lvis_fruits_yolo11m_80_v1",
+  "run_mode": "resume_interrupted",
+  "classes": 63,
+  "train_images": 4707,
+  "val_images": 1532,
+  "train_instances": 119422,
+  "val_instances": 33695,
+  "case_only_duplicates": {
+    "strawberry": [
+      [
+        30,
+        "Strawberry"
+      ],
+      [
+        57,
+        "strawberry"
+      ]
+    ],
+    "tomato": [
+      [
+        35,
+        "Tomato"
+      ],
+      [
+        59,
+        "tomato"
+      ]
+    ]
+  },
+  "dataset_yaml": "/content/lvis_fruits_yolo/data_local.yaml"
+}

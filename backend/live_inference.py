@@ -67,7 +67,7 @@ class LiveIngredientDetector:
             raise FileNotFoundError(
                 f"Model weights not found at: {self.model_path}\n"
                 f"Copy your trained weights there, e.g.:\n"
-                f"  cp training/runs/train4/weights/best.pt models/best.pt"
+                f"  cp the second-experiment best.pt checkpoint models/best.pt"
             )
 
         print(f"[INFO] Loading model from {self.model_path} ...")
