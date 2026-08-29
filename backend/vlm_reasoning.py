@@ -31,49 +31,38 @@ load_dotenv()
 # Production quality reasoning is intentionally routed through OpenRouter.
 ACTIVE_OPENROUTER_MODEL = "openrouter/free"
 
-QUALITY_PROMPT_TEMPLATE = """You are inspecting a food item detected by an object \
-detector as "{label}" (detector confidence: {confidence:.2f}).
+QUALITY_PROMPT_TEMPLATE = """{provider_guidance}
 
-Inspect the image crop for visible quality defects and assess specific metrics.
-
-Relevant quality metrics for {label}:
+Inspect the attached image crop. A detector identified it as "{label}" with confidence {confidence:.2f}.
+Assess only visible quality evidence. The applicable quality metrics are:
 {metrics_list}
 
-Respond with ONLY a JSON object, no other text, matching exactly this shape:
-{{
-    "detected_class": "{label}",
-  "status": "ok" | "defect" | "uncertain",
-  "overall_quality_score": <float 0.0-1.0, where 1.0 is perfect quality>,
-  "quality_metrics": {{
-    {metrics_json_schema}
-  }},
-  "defects": ["<defect1>", "<defect2>", ...],
-  "explanation": "<one sentence, concrete visual evidence>",
-  "required_action": "none" | "flag_for_review" | "remove"
-}}"""
+Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble.
+Use these exact keys: detected_class, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
+Allowed status values are exactly: ok, defect, uncertain.
+Allowed required_action values are exactly: none, flag_for_review, remove.
+Every quality_metrics value must be a number from 0.0 to 1.0. Use null only for overall_quality_score when evidence is insufficient.
+The explanation must be one concise sentence grounded in visible evidence.
+The JSON object must have this shape:
+{{"detected_class": "{label}", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{{metrics_json_schema}}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}"""
 
-COLLAGE_PROMPT_TEMPLATE = """You are inspecting {count} labeled food-item crops in one collage.
+COLLAGE_PROMPT_TEMPLATE = """{provider_guidance}
 
-Analyze every crop independently. Each crop has a unique crop_id printed in its panel.
-Do not merge crops or omit a crop. Return exactly one result for every crop_id.
+Inspect the attached collage of {count} labeled food-item crops.
+Analyze each panel independently. Each panel has a printed crop_id. Do not merge panels or omit any crop_id.
 
-For each crop, assess these metrics:
+Crop instructions:
 {crop_context}
 
-Respond with ONLY a JSON object matching exactly this shape:
-{{
-    "items": [
-        {{
-            "crop_id": "CROP_001",
-            "status": "ok" | "defect" | "uncertain",
-            "overall_quality_score": <float 0.0-1.0 or null>,
-            "quality_metrics": {{"metric": <float 0.0-1.0>}},
-            "defects": ["<defect>"],
-            "explanation": "<one concise sentence>",
-            "required_action": "none" | "flag_for_review" | "remove"
-        }}
-    ]
-}}"""
+Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble.
+The top-level object must contain exactly one key named items. items must be an array with one object for every crop_id.
+Each item must contain exactly these keys: crop_id, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
+Allowed status values are exactly: ok, defect, uncertain.
+Allowed required_action values are exactly: none, flag_for_review, remove.
+Every quality_metrics value must be a number from 0.0 to 1.0. Use null only for overall_quality_score when evidence is insufficient.
+The explanation must be one concise sentence grounded in visible evidence.
+Use this shape, replacing the example with the actual crop IDs:
+{{"items": [{{"crop_id": "CROP_001", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}]}}"""
 
 
 class VLMBackend(ABC):
@@ -105,19 +94,22 @@ class VLMBackend(ABC):
         """Send the crop + prompt to the model, return raw text response."""
         raise NotImplementedError
 
+    def _provider_guidance(self) -> str:
+        return "Follow the requested output contract exactly."
+
     def analyze(
         self, crop: np.ndarray, label: str, confidence: float
     ) -> QualityAssessment:
-        # Select quality dimensions from the detected ingredient class.
         metrics = get_quality_metrics(label)
-        metrics_list = "\n".join([f"- {m}" for m in metrics])
-        metrics_json_schema = ",\n    ".join([f'"{m}": <float 0.0-1.0>' for m in metrics])
-        
+        metrics_list = "\n".join(f"- {m}" for m in metrics)
+        metrics_json_schema = ", ".join(f'"{m}": 0.0' for m in metrics)
+
         prompt = QUALITY_PROMPT_TEMPLATE.format(
-            label=label, 
+            provider_guidance=self._provider_guidance(),
+            label=label,
             confidence=confidence,
             metrics_list=metrics_list,
-            metrics_json_schema=metrics_json_schema
+            metrics_json_schema=metrics_json_schema,
         )
 
         print(f"[VLM] Analyzing {label} (conf: {confidence:.2f})...")
@@ -142,7 +134,11 @@ class VLMBackend(ABC):
             f"- {crop['crop_id']}: {crop['label']} (detector confidence: {float(crop['confidence']):.2f}); metrics: {', '.join(crop['metrics'])}"
             for crop in crops
         )
-        prompt = COLLAGE_PROMPT_TEMPLATE.format(count=len(crops), crop_context=crop_context)
+        prompt = COLLAGE_PROMPT_TEMPLATE.format(
+            provider_guidance=self._provider_guidance(),
+            count=len(crops),
+            crop_context=crop_context,
+        )
         start = time.perf_counter()
         try:
             raw = self._call_model(collage, prompt)
@@ -262,10 +258,12 @@ class VLMBackend(ABC):
 
 
 class GPT4VLMBackend(VLMBackend):
-    """API-based inference via GPT-4o vision. Used as the high-accuracy
-    reference model, per the benchmark rationale in the README."""
+    """API-based inference via GPT-4o vision."""
 
     name = "gpt-4o"
+
+    def _provider_guidance(self) -> str:
+        return "You are a vision classifier using an OpenAI-compatible API. Follow the JSON contract exactly; return JSON only."
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
         import os
@@ -313,6 +311,12 @@ class GeminiVLMBackend(VLMBackend):
     """Google AI Studio / Gemini API vision backend."""
 
     name = "gemma-api"
+
+    def _provider_guidance(self) -> str:
+        return (
+            "You are Gemma 4 running through the native Google AI Studio API. "
+            "Do not reveal reasoning or thought text. Return only the final JSON object."
+        )
 
     def __init__(
         self,
@@ -375,8 +379,9 @@ class GeminiVLMBackend(VLMBackend):
                 ],
                 "generationConfig": {
                     "temperature": 0.0,
-                    "maxOutputTokens": 300,
+                    "maxOutputTokens": 600,
                     "responseMimeType": "application/json",
+                    "thinkingConfig": {"thinkingLevel": "MINIMAL"},
                 },
             },
             timeout=30,
@@ -391,11 +396,18 @@ class GeminiVLMBackend(VLMBackend):
             raise RuntimeError(f"Gemini returned no candidates.{detail}")
 
         parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(
+        visible_text = [
             part.get("text", "")
             for part in parts
-            if isinstance(part, dict)
-        ).strip()
+            if isinstance(part, dict) and not part.get("thought", False)
+        ]
+        text = "".join(visible_text).strip()
+        if not text:
+            text = "".join(
+                part.get("text", "")
+                for part in parts
+                if isinstance(part, dict)
+            ).strip()
 
         if not text:
             finish_reason = candidates[0].get("finishReason")
@@ -412,6 +424,9 @@ class OpenRouterBackend(VLMBackend):
     """Single OpenRouter implementation for the approved hosted VLM models."""
 
     name = "openrouter"
+
+    def _provider_guidance(self) -> str:
+        return "You are a hosted multimodal model behind an OpenAI-compatible API. Return only the requested JSON object."
 
     def __init__(self, api_key: Optional[str] = None, model: str = ACTIVE_OPENROUTER_MODEL):
         import os
@@ -458,7 +473,8 @@ class OpenRouterBackend(VLMBackend):
 
 
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
-    return GeminiVLMBackend(model=model)
+    """Return only the Google AI Studio Gemini backend."""
+    return GeminiVLMBackend()
 
 
 
