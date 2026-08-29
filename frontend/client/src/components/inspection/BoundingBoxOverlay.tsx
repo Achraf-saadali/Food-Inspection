@@ -11,10 +11,18 @@ interface BoundingBoxOverlayProps {
   items: InspectionItem[];
   width: number;
   height: number;
+  sourceWidth?: number;
+  sourceHeight?: number;
 }
 
-export function BoundingBoxOverlay({ items, width, height }: BoundingBoxOverlayProps) {
+export function BoundingBoxOverlay({ items, width, height, sourceWidth = width, sourceHeight = height }: BoundingBoxOverlayProps) {
   if (!items.length) return null;
+
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const contentWidth = sourceWidth * scale;
+  const contentHeight = sourceHeight * scale;
+  const offsetX = (width - contentWidth) / 2;
+  const offsetY = (height - contentHeight) / 2;
 
   return (
     <svg
@@ -27,13 +35,16 @@ export function BoundingBoxOverlay({ items, width, height }: BoundingBoxOverlayP
       {items.map((item, i) => {
         const { detection: det, quality: q } = item;
         const [nx1, ny1, nx2, ny2] = det.bbox_normalized;
-        const x = nx1 * width;
-        const y = ny1 * height;
-        const w = (nx2 - nx1) * width;
-        const h = (ny2 - ny1) * height;
+        const x = offsetX + nx1 * contentWidth;
+        const y = offsetY + ny1 * contentHeight;
+        const w = (nx2 - nx1) * contentWidth;
+        const h = (ny2 - ny1) * contentHeight;
         const color = getStatusColor(q.status);
-        const label = `${det.label} ${formatConfidence(det.confidence)} [${getStatusLabel(q.status)}]`;
+        const label = `${det.display_label || det.label} ${formatConfidence(det.confidence)} [${getStatusLabel(q.status)}]`;
         const labelY = y > 24 ? y - 6 : y + h + 16;
+        const commentary = q.commentary || q.explanation;
+        const commentaryLines = commentary.match(/.{1,48}(?:\s|$)/g)?.slice(0, 3) ?? [];
+        const commentaryY = y + h + 34;
 
         return (
           <g key={i}>
@@ -64,6 +75,18 @@ export function BoundingBoxOverlay({ items, width, height }: BoundingBoxOverlayP
             >
               {label}
             </text>
+            {commentaryLines.map((line, lineIndex) => (
+              <text
+                key={`${i}-commentary-${lineIndex}`}
+                x={x + 4}
+                y={commentaryY + lineIndex * 13}
+                fill={color}
+                fontSize={9}
+                fontFamily="'JetBrains Mono', monospace"
+              >
+                {line.trim()}
+              </text>
+            ))}
             {/* Corner markers */}
             <line x1={x} y1={y} x2={x + 8} y2={y} stroke={color} strokeWidth={2.5} />
             <line x1={x} y1={y} x2={x} y2={y + 8} stroke={color} strokeWidth={2.5} />

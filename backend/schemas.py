@@ -46,6 +46,7 @@ class Detection(BaseModel):
     """Output of the YOLO stage for a single object."""
 
     label: str
+    display_label: str = ""
     class_id: int
     confidence: float = Field(ge=0.0, le=1.0)
     bbox_xyxy: List[float] = Field(min_length=4, max_length=4)
@@ -57,6 +58,7 @@ class QualityAssessment(BaseModel):
     stage may not run on every detection (e.g. skipped by confidence gate)."""
 
     status: InspectionStatus
+    detected_class: Optional[str] = None
     overall_quality_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     quality_metrics: Dict[str, float] = Field(default_factory=dict)
     defects: List[str] = Field(default_factory=list)

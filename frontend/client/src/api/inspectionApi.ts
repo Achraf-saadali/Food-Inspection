@@ -7,11 +7,11 @@
 import type { HealthStatus, InspectionResult, InspectionStats, ModelInfo } from '../types/inspection';
 import apiClient from './client';
 
-export async function detectImage(file: File): Promise<InspectionResult> {
+export async function detectImage(file: File, signal?: AbortSignal): Promise<InspectionResult> {
   const form = new FormData();
   form.append('file', file);
   // Do not set Content-Type manually: the browser adds the multipart boundary.
-  const { data } = await apiClient.post<InspectionResult>('/detect', form);
+  const { data } = await apiClient.post<InspectionResult>('/detect', form, { signal });
   return data;
 }
 
@@ -34,20 +34,20 @@ export async function submitInspectJob(
   return data;
 }
 
-export async function pollInspectStatus(jobId: string): Promise<{
+export async function pollInspectStatus(jobId: string, signal?: AbortSignal): Promise<{
   status: 'pending' | 'processing' | 'completed' | 'failed';
   result?: InspectionResult;
   error?: string;
 }> {
-  const { data } = await apiClient.get(`/inspect/status/${jobId}`);
+  const { data } = await apiClient.get(`/inspect/status/${jobId}`, { signal });
   return data;
 }
 
 /** Submit a full inspection and poll until the persisted result is ready. */
 export async function inspectImage(
   file: File,
-  options?: { confidence_gate?: number; vlm_backend?: string; vlm_model?: string },
-  onProgress?: (stage: string) => void
+  options?: { confidence_gate?: number; vlm_backend?: string; vlm_model?: string; signal?: AbortSignal },
+  onProgress?: (stage: string) => void,
 ): Promise<InspectionResult> {
   onProgress?.('Uploading image...');
   const { job_id } = await submitInspectJob(file, options);
@@ -58,8 +58,14 @@ export async function inspectImage(
   const startTime = Date.now();
 
   while (Date.now() - startTime < maxWaitMs) {
-    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    const response = await pollInspectStatus(job_id);
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(resolve, pollIntervalMs);
+      options?.signal?.addEventListener('abort', () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException('Inspection cancelled', 'AbortError'));
+      }, { once: true });
+    });
+    const response = await pollInspectStatus(job_id, options?.signal);
     if (response.status === 'processing') {
       onProgress?.('Analyzing with VLM...');
       continue;

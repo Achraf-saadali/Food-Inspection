@@ -14,6 +14,7 @@ export interface ImageSize {
 
 export interface Detection {
   label: string;
+  display_label?: string;
   class_id: number;
   confidence: number;
   /** Absolute pixel coordinates [x1, y1, x2, y2] */
@@ -24,6 +25,7 @@ export interface Detection {
 
 export interface QualityAssessment {
   status: InspectionStatus;
+  detected_class?: string | null;
   overall_quality_score: number | null;
   /** Class-specific quality metrics, e.g. { ripeness: 0.9, bruising: 0.05 } */
   quality_metrics: Record<string, number>;

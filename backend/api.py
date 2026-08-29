@@ -147,7 +147,7 @@ def process_inspection_job(
 async def inspect(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    confidence_gate: float = Query(default=0.4, ge=0.0, le=1.0),
+    confidence_gate: float = Query(default=0.35, ge=0.0, le=1.0),
     vlm_backend: str = Query(default="openrouter"),
     vlm_model: str | None = Query(default=None),
 ):

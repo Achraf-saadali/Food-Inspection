@@ -28,7 +28,7 @@ interface UseInspectionReturn {
   isLoading: boolean;
   stage: InspectionStage;
   error: string | null;
-  run: (file: File, mode?: InspectionMode) => Promise<void>;
+  run: (file: File, mode?: InspectionMode, signal?: AbortSignal) => Promise<InspectionResult | null>;
   reset: () => void;
 }
 
@@ -39,29 +39,37 @@ export function useInspection(): UseInspectionReturn {
   const [error, setError] = useState<string | null>(null);
 
   const run = useCallback(
-    async (file: File, mode: InspectionMode = 'inspect') => {
+    async (file: File, mode: InspectionMode = 'inspect', signal?: AbortSignal) => {
       setIsLoading(true);
       setStage('Uploading image...');
       setError(null);
       try {
+        let completedResult: InspectionResult;
         if (mode === 'detect') {
           setStage('YOLO detecting...');
-          const res = await detectImage(file);
+          const res = await detectImage(file, signal);
           setResult(res);
+          completedResult = res;
         } else {
           const res = await inspectImage(
             file,
             {
-              confidence_gate: 0.4,
+              confidence_gate: 0.35,
+              signal,
             },
             (progressStage) => {
               setStage(progressStage as InspectionStage);
             }
           );
           setResult(res);
+          completedResult = res;
         }
         setStage('Complete');
+        return completedResult;
       } catch (err) {
+        if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+          return null;
+        }
         let msg = 'Inspection failed';
         if (err instanceof Error) {
           msg = err.message;
@@ -75,6 +83,7 @@ export function useInspection(): UseInspectionReturn {
           msg = 'Backend endpoint not found. Make sure you are running uvicorn backend.api:app from the repository root.';
         }
         setError(msg);
+        return null;
       } finally {
         setIsLoading(false);
       }

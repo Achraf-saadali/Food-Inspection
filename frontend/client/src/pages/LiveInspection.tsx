@@ -1,378 +1,103 @@
-/**
- * Live Inspection page — image upload, inference, bounding box overlay, results.
- * Design: Industrial Precision — scan-line animation, status-coded results
- *
- * Updated to show per-stage progress (Uploading → YOLO → VLM → Complete)
- * and to handle the new async job-based /inspect endpoint.
- */
-
-import { useRef, useState, useCallback } from 'react';
-import { Upload, ScanLine, X, Zap, Shield, AlertTriangle, Settings2, Loader2, CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Camera, Loader2, ScanLine, Settings2, Square, Upload, Video, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { detectImage } from '../api/inspectionApi';
 import { useInspection, type InspectionStage } from '../hooks/useInspection';
-import { DetectionCard } from '../components/inspection/DetectionCard';
 import { BoundingBoxOverlay } from '../components/inspection/BoundingBoxOverlay';
+import { DetectionCard } from '../components/inspection/DetectionCard';
 import { StatusBadge } from '../components/inspection/StatusBadge';
 import { formatTimestamp } from '../utils/inspection';
-import type { InspectionStatus } from '../types/inspection';
+import type { InspectionItem, InspectionResult, InspectionStatus } from '../types/inspection';
 
 type Mode = 'detect' | 'inspect';
-// ─── Stage progress indicator ─────────────────────────────────────────────────
+type SourceMode = 'camera' | 'upload';
+type Target = { id: string; item: InspectionItem };
+const LIVE_INTERVAL_MS = Number(import.meta.env.VITE_LIVE_INSPECTION_INTERVAL_MS || 750);
 
-const DETECT_STAGES: InspectionStage[] = ['Uploading image...', 'YOLO detecting...', 'Complete'];
-const INSPECT_STAGES: InspectionStage[] = [
-  'Uploading image...',
-  'YOLO detecting...',
-  'Analyzing with VLM...',
-  'Complete',
-];
-
-function StageProgressBar({ stage, mode }: { stage: InspectionStage; mode: Mode }) {
-  const stages = mode === 'detect' ? DETECT_STAGES : INSPECT_STAGES;
-  const currentIdx = stage ? stages.indexOf(stage) : -1;
-
-  return (
-    <div className="flex items-center gap-2 w-full">
-      {stages.map((s, idx) => {
-        const isDone = currentIdx > idx;
-        const isActive = currentIdx === idx;
-        return (
-          <div key={s} className="flex-1 flex flex-col items-center gap-1">
-            <div
-              className={cn(
-                'w-full h-1 rounded-full transition-all duration-500',
-                isDone
-                  ? 'bg-primary'
-                  : isActive
-                  ? 'bg-primary/60 animate-pulse'
-                  : 'bg-border'
-              )}
-            />
-            <span
-              className={cn(
-                'text-[10px] font-mono text-center leading-tight',
-                isDone
-                  ? 'text-primary'
-                  : isActive
-                  ? 'text-primary/80'
-                  : 'text-muted-foreground/50'
-              )}
-            >
-              {s}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
+function iou(a: [number, number, number, number], b: [number, number, number, number]) {
+  const left = Math.max(a[0], b[0]); const top = Math.max(a[1], b[1]);
+  const right = Math.min(a[2], b[2]); const bottom = Math.min(a[3], b[3]);
+  const overlap = Math.max(0, right - left) * Math.max(0, bottom - top);
+  const areaA = Math.max(0, a[2] - a[0]) * Math.max(0, a[3] - a[1]);
+  const areaB = Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+  return overlap / Math.max(areaA + areaB - overlap, 1);
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function centerDistance(a: [number, number, number, number], b: [number, number, number, number]) {
+  const distance = Math.hypot((a[0] + a[2] - b[0] - b[2]) / 2, (a[1] + a[3] - b[1] - b[3]) / 2);
+  return distance / Math.max((Math.hypot(a[2] - a[0], a[3] - a[1]) + Math.hypot(b[2] - b[0], b[3] - b[1])) / 2, 1);
+}
+
+function wait(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { window.clearTimeout(timer); reject(new DOMException('Cancelled', 'AbortError')); }, { once: true });
+  });
+}
+
+function Progress({ stage, mode }: { stage: InspectionStage; mode: Mode }) {
+  const stages = mode === 'inspect' ? ['Uploading image...', 'YOLO detecting...', 'Analyzing with VLM...', 'Complete'] : ['Uploading image...', 'YOLO detecting...', 'Complete'];
+  return <div className="flex gap-2">{stages.map((item) => <div key={item} className={cn('flex-1 text-center text-[10px] font-mono border-t-2 pt-1', stage === item ? 'border-primary text-primary' : 'border-border text-muted-foreground')}>{item}</div>)}</div>;
+}
 
 export default function LiveInspection() {
   const { result, isLoading, stage, error, run, reset } = useInspection();
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imgSize, setImgSize] = useState({ w: 0, h: 0 });
-  const [mode, setMode] = useState<Mode>('inspect');
-  const [isDragging, setIsDragging] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
+  const [source, setSource] = useState<SourceMode>('camera'); const [mode, setMode] = useState<Mode>('inspect');
+  const [cameraActive, setCameraActive] = useState(false); const [running, setRunning] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null); const [showSettings, setShowSettings] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null); const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 }); const [liveItems, setLiveItems] = useState<InspectionItem[]>([]);
+  const videoRef = useRef<HTMLVideoElement>(null); const canvasRef = useRef<HTMLCanvasElement>(null); const streamRef = useRef<MediaStream | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null); const imageRef = useRef<HTMLImageElement>(null); const frameRef = useRef<HTMLDivElement>(null);
+  const runningRef = useRef(false); const abortRef = useRef<AbortController | null>(null); const targetsRef = useRef<Target[]>([]);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith('image/')) return;
-      const url = URL.createObjectURL(file);
-      setImageUrl(url);
-      reset();
-      await run(file, mode);
-    },
-    [mode, run, reset]
-  );
+  const stopInspection = useCallback(() => { runningRef.current = false; abortRef.current?.abort(); abortRef.current = null; setRunning(false); }, []);
+  const stopCamera = useCallback(() => { stopInspection(); streamRef.current?.getTracks().forEach((track) => track.stop()); streamRef.current = null; if (videoRef.current) videoRef.current.srcObject = null; setCameraActive(false); setLiveItems([]); }, [stopInspection]);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
+  const matchTargets = useCallback((items: InspectionItem[], keepQuality: boolean) => {
+    const used = new Set<string>(); const next: Target[] = [];
+    items.forEach((item) => {
+      const candidates = targetsRef.current.filter((target) => target.item.detection.label === item.detection.label && !used.has(target.id)).map((target) => ({ target, overlap: iou(target.item.detection.bbox_xyxy, item.detection.bbox_xyxy), distance: centerDistance(target.item.detection.bbox_xyxy, item.detection.bbox_xyxy) })).filter((candidate) => candidate.overlap >= 0.05 || candidate.distance <= 1.5).sort((a, b) => b.overlap - a.overlap);
+      const match = candidates[0]?.target; const id = match?.id || `${item.detection.label}-${targetsRef.current.length + next.length + 1}`;
+      used.add(id); next.push({ id, item: keepQuality && match ? { ...item, quality: match.item.quality } : item });
+    });
+    targetsRef.current = next; return next.map((target) => target.item);
+  }, []);
 
-  const handleImgLoad = () => {
-    if (imgRef.current) {
-      setImgSize({ w: imgRef.current.clientWidth, h: imgRef.current.clientHeight });
-    }
-  };
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    try {
+      const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+      let stream: MediaStream; try { stream = await navigator.mediaDevices.getUserMedia(constraints); } catch { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false }); }
+      streamRef.current = stream; if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play(); } setCameraActive(true);
+    } catch (err) { setCameraError(err instanceof DOMException && err.name === 'NotAllowedError' ? 'Camera permission denied. Please allow camera access in your browser settings.' : 'Camera unavailable. Check that a camera is connected.'); }
+  }, []);
 
-  const overallStatus: InspectionStatus = !result
-    ? 'skipped'
-    : result.items.some((i) => i.quality.status === 'defect')
-    ? 'defect'
-    : result.items.some((i) => i.quality.status === 'uncertain')
-    ? 'uncertain'
-    : result.items.length === 0
-    ? 'skipped'
-    : 'ok';
+  const capture = () => { const video = videoRef.current; const canvas = canvasRef.current; if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null; canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height); return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8)); };
 
-  // Derive a short status label for the loading button
-  const loadingLabel = stage && stage !== 'Complete' ? stage : 'Processing...';
+  const startInspection = useCallback(async () => {
+    if (!cameraActive || runningRef.current) return; runningRef.current = true; targetsRef.current = []; setLiveItems([]); setRunning(true); const controller = new AbortController(); abortRef.current = controller;
+    try { while (runningRef.current && !controller.signal.aborted) {
+      const blob = await capture(); if (!blob) { await wait(250, controller.signal); continue; }
+      const frame = new File([blob], `camera-frame-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      if (mode === 'inspect') { const detected = await detectImage(frame, controller.signal); setFrameSize(detected.image_size); setLiveItems(matchTargets(detected.items, true)); }
+      const completed = await run(frame, mode, controller.signal); if (!completed) break;
+      if (mode === 'inspect') { setFrameSize(completed.image_size); setLiveItems(matchTargets(completed.items, false)); } else setLiveItems(completed.items);
+      await wait(LIVE_INTERVAL_MS, controller.signal);
+    } } catch (err) { if (!(err instanceof DOMException && err.name === 'AbortError')) setCameraError('Live inspection stopped unexpectedly.'); }
+    finally { runningRef.current = false; abortRef.current = null; setRunning(false); }
+  }, [cameraActive, mode, matchTargets, run]);
 
-  return (
-    <div className="page-enter p-6 space-y-6">
-      {/* Header */}
-      <div className="border-b border-border bg-card px-0 py-4 flex items-center justify-between amber-accent-line -mx-6 px-6 mb-0">
-        <div className="flex items-center gap-3">
-          <div className="w-1 h-6 bg-primary" />
-          <div>
-            <h1 className="text-xl font-bold text-foreground font-mono tracking-tight">LIVE INSPECTION</h1>
-            <p className="text-xs text-muted-foreground font-mono">UPLOAD IMAGE · YOLO + VLM QUALITY REASONING</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowSettings(!showSettings)}
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 border text-xs font-mono transition-colors hmi-panel',
-            showSettings ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:text-foreground'
-          )}
-        >
-          <Settings2 className="w-3.5 h-3.5" />
-          SETTINGS
-        </button>
-      </div>
+  const handleFile = useCallback(async (file: File) => { if (!file.type.startsWith('image/')) return; stopInspection(); if (imageUrl) URL.revokeObjectURL(imageUrl); setImageUrl(URL.createObjectURL(file)); reset(); await run(file, mode); }, [imageUrl, mode, reset, run, stopInspection]);
+  useEffect(() => () => { stopCamera(); }, [stopCamera]);
+  useEffect(() => () => { if (imageUrl) URL.revokeObjectURL(imageUrl); }, [imageUrl]);
+  useEffect(() => { if (!frameRef.current) return; const observer = new ResizeObserver(([entry]) => setFrameSize((size) => ({ ...size, width: entry.contentRect.width, height: entry.contentRect.height }))); observer.observe(frameRef.current); return () => observer.disconnect(); }, [source]);
+  const overall: InspectionStatus = !result ? 'skipped' : result.items.some((item) => item.quality.status === 'defect') ? 'defect' : result.items.some((item) => item.quality.status === 'uncertain') ? 'uncertain' : result.items.length ? 'ok' : 'skipped';
 
-      {/* Settings panel */}
-      {showSettings && (
-        <div className="rounded border border-border bg-card p-4 space-y-4">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pipeline Configuration</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-muted-foreground mb-2 block">Inference Mode</label>
-              <div className="flex gap-2">
-                {(['detect', 'inspect'] as Mode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={cn(
-                      'flex-1 py-2 px-3 rounded border text-xs font-mono transition-colors',
-                      mode === m ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-secondary text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {m === 'detect' ? '⚡ YOLO Only' : '🧠 YOLO + VLM'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {mode === 'inspect' && (
-              <div>
-                <label className="text-xs text-muted-foreground mb-2 block">VLM Backend</label>
-                <div className="w-full py-2 px-3 rounded border border-border bg-secondary/50 text-xs font-mono text-muted-foreground">
-                  OpenRouter (Gemma 4 31B)
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Left: image upload + overlay */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Drop zone */}
-          <div
-            className={cn(
-              'relative rounded border-2 border-dashed transition-all duration-200 overflow-hidden',
-              isDragging ? 'border-primary bg-primary/5' : 'border-border bg-card',
-              imageUrl ? 'aspect-video' : 'aspect-video flex items-center justify-center'
-            )}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => !imageUrl && fileInputRef.current?.click()}
-          >
-            {imageUrl ? (
-              <>
-                <img
-                  ref={imgRef}
-                  src={imageUrl}
-                  alt="Inspection target"
-                  className="w-full h-full object-contain"
-                  onLoad={handleImgLoad}
-                />
-                {/* Scan line animation while loading */}
-                {isLoading && (
-                  <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div
-                      className="absolute left-0 right-0 h-0.5 bg-primary/70 scan-line"
-                      style={{ boxShadow: '0 0 8px 2px rgba(245,158,11,0.5)' }}
-                    />
-                    <div className="absolute inset-0 bg-background/20" />
-                  </div>
-                )}
-                {/* Bounding box overlay */}
-                {result && imgSize.w > 0 && (
-                  <BoundingBoxOverlay items={result.items} width={imgSize.w} height={imgSize.h} />
-                )}
-                {/* Clear button */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setImageUrl(null); reset(); }}
-                  className="absolute top-2 right-2 w-7 h-7 rounded bg-background/80 border border-border flex items-center justify-center hover:bg-secondary transition-colors"
-                >
-                  <X className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
-              </>
-            ) : (
-              <div className="text-center space-y-3 p-8 cursor-pointer">
-                <div className="w-14 h-14 rounded-full bg-secondary flex items-center justify-center mx-auto">
-                  <Upload className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Drop image here or click to upload
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">JPEG, PNG, WebP supported</p>
-                </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 rounded border border-primary/40 bg-primary/10 text-primary text-xs font-mono hover:bg-primary/20 transition-colors"
-                >
-                  Browse Files
-                </button>
-              </div>
-            )}
-          </div>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
-
-          {/* Stage progress bar — shown while loading */}
-          {isLoading && stage && (
-            <div className="rounded border border-border bg-card p-3">
-              <StageProgressBar stage={stage} mode={mode} />
-            </div>
-          )}
-
-          {/* Run button */}
-          {imageUrl && (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="w-full py-2.5 rounded border border-primary/40 bg-primary/10 text-primary text-sm font-mono hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  {loadingLabel}
-                </>
-              ) : stage === 'Complete' ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4" />
-                  Upload New Image
-                </>
-              ) : (
-                <>
-                  <ScanLine className="w-4 h-4" />
-                  Upload New Image
-                </>
-              )}
-            </button>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div className="flex items-start gap-3 p-4 rounded border border-[#ef444440] bg-[#ef444410]">
-              <AlertTriangle className="w-4 h-4 text-[#ef4444] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-[#ef4444]">Inspection Failed</p>
-                <p className="text-xs text-muted-foreground mt-1 font-mono">{error}</p>
-                {error.includes('connect') && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Ensure the FastAPI backend is running at{' '}
-                    <code className="font-mono text-primary">http://localhost:8000</code>
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right: results panel */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Result summary */}
-          {result ? (
-            <div className="rounded border border-border bg-card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Inspection Result</h3>
-                <StatusBadge status={overallStatus} size="md" pulse={overallStatus === 'defect'} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Frame ID</p>
-                  <p className="text-sm font-mono text-foreground">#{result.frame_id}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Detections</p>
-                  <p className="text-sm font-mono text-foreground">{result.num_detections}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Image Size</p>
-                  <p className="text-sm font-mono text-foreground">{result.image_size.width}×{result.image_size.height}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Timestamp</p>
-                  <p className="text-xs font-mono text-foreground">{formatTimestamp(result.timestamp)}</p>
-                </div>
-              </div>
-              {/* Mode indicator */}
-              <div className="flex items-center gap-2 pt-1 border-t border-border">
-                {mode === 'inspect' ? (
-                  <><Shield className="w-3.5 h-3.5 text-primary" /><span className="text-xs font-mono text-muted-foreground">YOLO + VLM · OpenRouter</span></>
-                ) : (
-                  <><Zap className="w-3.5 h-3.5 text-primary" /><span className="text-xs font-mono text-muted-foreground">YOLO Detection Only</span></>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="rounded border border-border bg-card p-6 text-center">
-              <ScanLine className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                {isLoading
-                  ? stage || 'Analyzing image...'
-                  : 'Upload an image to begin inspection'}
-              </p>
-              {isLoading && stage && (
-                <p className="text-xs text-muted-foreground/60 mt-1 font-mono">
-                  {stage === 'Analyzing with VLM...'
-                    ? 'VLM reasoning may take 5–15 seconds per detection...'
-                    : stage === 'YOLO detecting...'
-                    ? 'Running YOLO object detection...'
-                    : ''}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Detection items */}
-          {result && result.items.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Detected Items ({result.items.length})
-              </h3>
-              {result.items.map((item, i) => (
-                <DetectionCard key={i} item={item} index={i} />
-              ))}
-            </div>
-          )}
-
-          {result && result.items.length === 0 && (
-            <div className="rounded border border-border bg-card p-6 text-center">
-              <p className="text-sm text-muted-foreground">No objects detected in this image.</p>
-              <p className="text-xs text-muted-foreground mt-1 font-mono">
-                Try lowering the confidence threshold or use a clearer image.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="page-enter p-6 space-y-6"><header className="border-b border-border bg-card py-4 flex justify-between amber-accent-line"><div className="flex gap-3"><div className="w-1 h-6 bg-primary" /><div><h1 className="text-xl font-bold font-mono">LIVE INSPECTION</h1><p className="text-xs text-muted-foreground font-mono">CAMERA · YOLO + VLM QUALITY REASONING</p></div></div><button onClick={() => setShowSettings(!showSettings)} className="border border-border px-3 py-1.5 text-xs font-mono flex gap-2 items-center"><Settings2 className="w-3.5 h-3.5" /> SETTINGS</button></header>
+    {showSettings && <div className="border border-border bg-card p-4"><label className="text-xs text-muted-foreground">Inference mode</label><div className="flex gap-2 mt-2">{(['detect', 'inspect'] as Mode[]).map((item) => <button key={item} onClick={() => setMode(item)} className={cn('border px-3 py-2 text-xs font-mono', mode === item ? 'border-primary text-primary' : 'border-border text-muted-foreground')}>{item === 'detect' ? 'YOLO Only' : 'YOLO + VLM'}</button>)}</div></div>}
+    <div className="flex gap-2 border-b border-border"><button onClick={() => { stopInspection(); setSource('camera'); }} className={cn('px-4 py-2 text-xs font-mono border-b-2 flex gap-2', source === 'camera' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground')}><Camera className="w-3.5 h-3.5" /> CAMERA</button><button onClick={() => { stopInspection(); setSource('upload'); }} className={cn('px-4 py-2 text-xs font-mono border-b-2 flex gap-2', source === 'upload' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground')}><Upload className="w-3.5 h-3.5" /> UPLOAD IMAGE</button></div>
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6"><main className="lg:col-span-3 space-y-4">{source === 'camera' ? <><div ref={frameRef} className="relative aspect-video bg-black border border-border overflow-hidden"><video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-contain" />{!cameraActive && <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"><Video className="w-10 h-10 text-muted-foreground" /><button onClick={startCamera} className="border border-primary/40 bg-primary/10 px-4 py-2 text-primary text-xs font-mono">START CAMERA</button></div>}{liveItems.length > 0 && frameSize.width > 0 && <BoundingBoxOverlay items={liveItems} width={frameSize.width} height={frameSize.height} sourceWidth={frameSize.width} sourceHeight={frameSize.height} />}{isLoading && <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary scan-line" />}</div><canvas ref={canvasRef} className="hidden" /><div className="flex flex-wrap gap-2"><button onClick={startCamera} disabled={cameraActive} className="border border-primary/40 px-3 py-2 text-primary text-xs font-mono"><Camera className="w-3.5 h-3.5 inline mr-2" />START CAMERA</button><button onClick={startInspection} disabled={!cameraActive || running} className="border border-primary/40 px-3 py-2 text-primary text-xs font-mono"><ScanLine className="w-3.5 h-3.5 inline mr-2" />START INSPECTION</button><button onClick={stopInspection} disabled={!running} className="border border-border px-3 py-2 text-muted-foreground text-xs font-mono"><Square className="w-3.5 h-3.5 inline mr-2" />STOP INSPECTION</button><button onClick={stopCamera} disabled={!cameraActive} className="border border-red-400/40 px-3 py-2 text-red-400 text-xs font-mono"><X className="w-3.5 h-3.5 inline mr-2" />STOP CAMERA</button></div></> : <><div ref={frameRef} className="relative aspect-video border-2 border-dashed border-border overflow-hidden" onDrop={(event) => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) void handleFile(file); }} onDragOver={(event) => event.preventDefault()}>{imageUrl ? <><img ref={imageRef} src={imageUrl} alt="Inspection target" className="w-full h-full object-contain" onLoad={() => imageRef.current && setImageSize({ width: imageRef.current.naturalWidth, height: imageRef.current.naturalHeight })} />{result && <BoundingBoxOverlay items={result.items} width={frameSize.width} height={frameSize.height} sourceWidth={imageSize.width} sourceHeight={imageSize.height} />}<button onClick={() => { URL.revokeObjectURL(imageUrl); setImageUrl(null); reset(); }} className="absolute top-2 right-2 border border-border bg-background p-2"><X className="w-3.5 h-3.5" /></button></> : <button onClick={() => fileRef.current?.click()} className="absolute inset-0 text-sm text-muted-foreground">Drop image here or click to upload</button>}</div><input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleFile(file); }} /><button onClick={() => fileRef.current?.click()} disabled={isLoading} className="w-full border border-primary/40 py-2.5 text-primary text-sm font-mono">{isLoading ? <><Loader2 className="w-4 h-4 inline mr-2 animate-spin" />{stage}</> : 'UPLOAD NEW IMAGE'}</button></>}{cameraError && <div className="border border-red-400/40 bg-red-400/10 p-4 text-xs text-red-400"><AlertTriangle className="w-4 h-4 inline mr-2" />{cameraError}</div>}{error && <div className="border border-red-400/40 bg-red-400/10 p-4 text-xs text-red-400"><AlertTriangle className="w-4 h-4 inline mr-2" />{error}</div>}{isLoading && stage && <div className="border border-border bg-card p-3"><Progress stage={stage} mode={mode} /></div>}</main>
+      <aside className="lg:col-span-2 space-y-4">{result ? <div className="border border-border bg-card p-4"><div className="flex justify-between"><h3 className="text-xs font-semibold text-muted-foreground uppercase">Inspection Result</h3><StatusBadge status={overall} size="md" /></div><div className="grid grid-cols-2 gap-3 mt-3 text-xs"><div>Frame <strong className="font-mono">#{result.frame_id}</strong></div><div>Detections <strong className="font-mono">{result.num_detections}</strong></div><div>Size <strong className="font-mono">{result.image_size.width}×{result.image_size.height}</strong></div><div>Time <strong className="font-mono">{formatTimestamp(result.timestamp)}</strong></div></div></div> : <div className="border border-border bg-card p-6 text-center text-sm text-muted-foreground">Start an inspection to see results.</div>}{result?.items.map((item, index) => <DetectionCard key={`${result.frame_id}-${index}`} item={item} index={index} />)}</aside></div>
+  </div>;
 }

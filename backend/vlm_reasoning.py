@@ -2,6 +2,7 @@
 VLM reasoning stage.
 
 Provides a backend-agnostic interface so the pipeline can call
+            "detected_class": "apple",
 `backend.analyze(crop, label, confidence)` without knowing which hosted
 provider is used.
 
@@ -28,7 +29,7 @@ from backend.schemas import InspectionStatus, QualityAssessment, RequiredAction
 load_dotenv()
 
 # Production quality reasoning is intentionally routed through OpenRouter.
-ACTIVE_OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+ACTIVE_OPENROUTER_MODEL = "openrouter/free"
 
 QUALITY_PROMPT_TEMPLATE = """You are inspecting a food item detected by an object \
 detector as "{label}" (detector confidence: {confidence:.2f}).
@@ -40,6 +41,7 @@ Relevant quality metrics for {label}:
 
 Respond with ONLY a JSON object, no other text, matching exactly this shape:
 {{
+    "detected_class": "{label}",
   "status": "ok" | "defect" | "uncertain",
   "overall_quality_score": <float 0.0-1.0, where 1.0 is perfect quality>,
   "quality_metrics": {{
@@ -48,6 +50,29 @@ Respond with ONLY a JSON object, no other text, matching exactly this shape:
   "defects": ["<defect1>", "<defect2>", ...],
   "explanation": "<one sentence, concrete visual evidence>",
   "required_action": "none" | "flag_for_review" | "remove"
+}}"""
+
+COLLAGE_PROMPT_TEMPLATE = """You are inspecting {count} labeled food-item crops in one collage.
+
+Analyze every crop independently. Each crop has a unique crop_id printed in its panel.
+Do not merge crops or omit a crop. Return exactly one result for every crop_id.
+
+For each crop, assess these metrics:
+{crop_context}
+
+Respond with ONLY a JSON object matching exactly this shape:
+{{
+    "items": [
+        {{
+            "crop_id": "CROP_001",
+            "status": "ok" | "defect" | "uncertain",
+            "overall_quality_score": <float 0.0-1.0 or null>,
+            "quality_metrics": {{"metric": <float 0.0-1.0>}},
+            "defects": ["<defect>"],
+            "explanation": "<one concise sentence>",
+            "required_action": "none" | "flag_for_review" | "remove"
+        }}
+    ]
 }}"""
 
 
@@ -110,6 +135,86 @@ class VLMBackend(ABC):
         parsed.latency_ms = latency_ms
         return parsed
 
+    def analyze_collage(
+        self, collage: np.ndarray, crops: list[dict[str, object]]
+    ) -> dict[str, QualityAssessment]:
+        crop_context = "\n".join(
+            f"- {crop['crop_id']}: {crop['label']} (detector confidence: {float(crop['confidence']):.2f}); metrics: {', '.join(crop['metrics'])}"
+            for crop in crops
+        )
+        prompt = COLLAGE_PROMPT_TEMPLATE.format(count=len(crops), crop_context=crop_context)
+        start = time.perf_counter()
+        try:
+            raw = self._call_model(collage, prompt)
+            data = self._parse_collage_response(raw)
+            assessments: dict[str, QualityAssessment] = {}
+            for crop in crops:
+                crop_id = str(crop['crop_id'])
+                item = data.get(crop_id)
+                try:
+                    if item is None:
+                        raise ValueError(f"VLM response omitted {crop_id}.")
+                    assessments[crop_id] = self._assessment_from_data(item)
+                except Exception as exc:  # noqa: BLE001 - isolate malformed crop results
+                    assessments[crop_id] = self._fallback_assessment(str(exc))
+                assessments[crop_id].vlm_backend = self.name
+                assessments[crop_id].latency_ms = (time.perf_counter() - start) * 1000
+            return assessments
+        except Exception as exc:  # noqa: BLE001 - preserve one collage failure per crop
+            return {
+                str(crop['crop_id']): self._with_metadata(self._fallback_assessment(str(exc)), start)
+                for crop in crops
+            }
+
+    @staticmethod
+    def _assessment_from_data(data: dict) -> QualityAssessment:
+        status_val = str(data.get("status", "uncertain")).lower()
+        if status_val not in [status.value for status in InspectionStatus]:
+            status_val = "uncertain"
+        return QualityAssessment(
+            detected_class=data.get("detected_class"),
+            status=InspectionStatus(status_val),
+            overall_quality_score=data.get("overall_quality_score"),
+            quality_metrics=VLMBackend._numeric_metrics(data.get("quality_metrics", {})),
+            defects=data.get("defects", []),
+            explanation=data.get("explanation", ""),
+            required_action=RequiredAction(data.get("required_action", "none")),
+            vlm_backend="pending",
+        )
+
+    @staticmethod
+    def _parse_collage_response(raw: str) -> dict[str, dict]:
+        cleaned = raw.strip()
+        if "```json" in cleaned:
+            cleaned = cleaned.split("```json")[1].split("```")[0].strip()
+        elif "```" in cleaned:
+            cleaned = cleaned.split("```")[1].split("```")[0].strip()
+        start_idx = cleaned.find("{")
+        end_idx = cleaned.rfind("}")
+        if start_idx == -1 or end_idx == -1:
+            raise ValueError("VLM response did not contain a JSON object.")
+        payload = json.loads(cleaned[start_idx:end_idx + 1])
+        return {
+            str(item["crop_id"]): item
+            for item in payload.get("items", [])
+            if isinstance(item, dict) and item.get("crop_id")
+        }
+
+    def _with_metadata(self, assessment: QualityAssessment, started: float) -> QualityAssessment:
+        assessment.vlm_backend = self.name
+        assessment.latency_ms = (time.perf_counter() - started) * 1000
+        return assessment
+
+    @staticmethod
+    def _numeric_metrics(metrics: object) -> dict[str, float]:
+        if not isinstance(metrics, dict):
+            return {}
+        return {
+            str(name): float(value)
+            for name, value in metrics.items()
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+        }
+
     @staticmethod
     def _parse_response(raw: str) -> QualityAssessment:
         # Models sometimes wrap JSON in markdown fences despite instructions.
@@ -133,9 +238,10 @@ class VLMBackend(ABC):
             status_val = "uncertain"
 
         return QualityAssessment(
+            detected_class=data.get("detected_class"),
             status=InspectionStatus(status_val),
             overall_quality_score=data.get("overall_quality_score"),
-            quality_metrics=data.get("quality_metrics", {}),
+            quality_metrics=VLMBackend._numeric_metrics(data.get("quality_metrics", {})),
             defects=data.get("defects", []),
             explanation=data.get("explanation", ""),
             required_action=RequiredAction(data.get("required_action", "none")),
@@ -202,47 +308,101 @@ class GPT4VLMBackend(VLMBackend):
         return self._extract_message_content(response)
 
 
-class GeminiVLMBackend(VLMBackend):
-    """Hosted Gemma 4 vision through the Gemini API.
 
-    The provider uses Google's native generateContent endpoint because the
-    hosted Gemma image guide documents that interface directly. Set
-    ``GEMINI_API_KEY`` and optionally ``GEMMA_API_BASE_URL``.
-    """
+class GeminiVLMBackend(VLMBackend):
+    """Google AI Studio / Gemini API vision backend."""
 
     name = "gemma-api"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemma-4-26b-a4b-it"):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
         import os
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMMA_API_KEY")
+
+        self.api_key = (
+            api_key
+            or os.getenv("GEMINI_API_KEY")
+            or os.getenv("GEMMA_API_KEY")
+        )
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY or GEMMA_API_KEY not found in environment.")
-        self.base_url = os.getenv("GEMMA_API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
-        self.model = "google/gemma-4-31b-it:free"
+            raise ValueError(
+                "GEMINI_API_KEY or GEMMA_API_KEY not found in environment."
+            )
+
+        self.base_url = os.getenv(
+            "GEMMA_API_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta",
+         ).rstrip("/")
+
+        self.model = (
+            model
+            or os.getenv("GEMMA_MODEL")
+            or "gemma-4-31b-it"
+        ).removeprefix("models/")
 
     def _call_model(self, crop: np.ndarray, prompt: str) -> str:
         import base64
         import cv2
         import requests
 
+        if crop is None or getattr(crop, "size", 0) == 0:
+            raise ValueError("Cannot send an empty image crop to Gemini.")
+
         ok, buf = cv2.imencode(".jpg", crop)
         if not ok:
             raise RuntimeError("Failed to encode crop as JPEG")
+
         response = requests.post(
             f"{self.base_url}/models/{self.model}:generateContent",
             params={"key": self.api_key},
+            headers={"Content-Type": "application/json"},
             json={
-                "contents": [{"parts": [
-                    {"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(buf).decode("utf-8")}},
-                    {"text": prompt},
-                ]}],
-                "generationConfig": {"temperature": 0.0, "maxOutputTokens": 300},
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": base64.b64encode(buf).decode("ascii"),
+                                }
+                            },
+                            {"text": prompt},
+                        ],
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.0,
+                    "maxOutputTokens": 300,
+                    "responseMimeType": "application/json",
+                },
             },
             timeout=30,
         )
         response.raise_for_status()
         payload = response.json()
-        return payload["candidates"][0]["content"]["parts"][0]["text"]
+
+        candidates = payload.get("candidates") or []
+        if not candidates:
+            block_reason = payload.get("promptFeedback", {}).get("blockReason")
+            detail = f" Prompt blocked: {block_reason}." if block_reason else ""
+            raise RuntimeError(f"Gemini returned no candidates.{detail}")
+
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(
+            part.get("text", "")
+            for part in parts
+            if isinstance(part, dict)
+        ).strip()
+
+        if not text:
+            finish_reason = candidates[0].get("finishReason")
+            detail = f" Finish reason: {finish_reason}." if finish_reason else ""
+            raise RuntimeError(f"Gemini returned no text content.{detail}")
+
+        return text
 
 
 class OpenRouterBackend(VLMBackend):
@@ -298,20 +458,7 @@ class OpenRouterBackend(VLMBackend):
 
 
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
-    """Create a VLM backend while consolidating hosted alternatives on OpenRouter.
+    return GeminiVLMBackend(model=model)
 
-    GPT-4 Vision and Gemini remain dedicated classes. Historical Qwen, Gemma,
-    NVIDIA, and OpenRouter names are accepted for CLI/API compatibility but all
-    use the same OpenRouter implementation and OPENROUTER_API_KEY.
-    """
-    normalized_name = name.lower().strip()
-    if normalized_name in {"gpt4o", "gpt4vlm", "openai"}:
-        return GPT4VLMBackend(model=model or "gpt-4o")
-    if normalized_name in {"gemini", "gemini-api"}:
-        return GeminiVLMBackend(model=model or "gemma-4-26b-a4b-it")
-    if normalized_name in {
-        "openrouter", "gemma", "gemma-api", "google-gemma",
-        "qwen", "qwen-api", "nvidia", "nvidia-api", "nim",
-    }:
-        return OpenRouterBackend(model=model or ACTIVE_OPENROUTER_MODEL)
-    raise ValueError(f"Unsupported VLM backend: {name}")
+
+

@@ -61,7 +61,7 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground capitalize truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              {det.label}
+              {det.display_label || det.label}
             </span>
             <span className="text-xs text-muted-foreground font-mono">#{det.class_id}</span>
           </div>
