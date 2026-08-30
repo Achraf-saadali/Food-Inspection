@@ -72,10 +72,12 @@ def build_quality_commentary(label: str, quality: QualityAssessment) -> str:
         else "Quality score is unavailable. "
     )
     if quality.defects:
-        defects = ", ".join(defect.replace("_", " ") for defect in quality.defects[:3])
+        defects = ", ".join(defect.replace("_", " ") for defect in quality.defects)
         evidence = f"Observed issue{'s' if len(quality.defects) > 1 else ''}: {defects}. "
     elif quality.status == InspectionStatus.OK:
         evidence = "No visible quality defects were identified. "
+    elif quality.status == InspectionStatus.DEFECT:
+        evidence = "Visible quality concerns were identified. "
     elif quality.quality_metrics:
         weakest_metric, weakest_score = min(quality.quality_metrics.items(), key=lambda metric: metric[1])
         evidence = f"The lowest assessed metric is {weakest_metric.replace('_', ' ')} at {weakest_score:.2f}. "

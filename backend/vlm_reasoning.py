@@ -41,7 +41,8 @@ Return exactly one JSON object and nothing else. Do not use Markdown fences, com
 Use these exact keys: detected_class, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
 Allowed status values are exactly: ok, defect, uncertain.
 Allowed required_action values are exactly: none, flag_for_review, remove.
-Every quality_metrics value must be a number from 0.0 to 1.0. Use null only for overall_quality_score when evidence is insufficient.
+Every quality_metrics value is a quality score from 0.0 to 1.0, not a probability. A value of 1.0 means excellent quality or that the related defect is confidently absent or minimal; 0.0 means unacceptable quality or strong visible evidence of poor quality. For defect-related metrics such as mold, bruising, cracking, skin_damage, visible_decay, and discoloration, higher values mean the defect is absent or minimal. The defects array must contain only defects visibly supported by the crop. Use null only for overall_quality_score when evidence is insufficient.
+For status=ok, defects must be empty and the explanation must say that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
 The explanation must be one concise sentence grounded in visible evidence.
 The JSON object must have this shape:
 {{"detected_class": "{label}", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{{metrics_json_schema}}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}"""
@@ -59,7 +60,8 @@ The top-level object must contain exactly one key named items. items must be an 
 Each item must contain exactly these keys: crop_id, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
 Allowed status values are exactly: ok, defect, uncertain.
 Allowed required_action values are exactly: none, flag_for_review, remove.
-Every quality_metrics value must be a number from 0.0 to 1.0. Use null only for overall_quality_score when evidence is insufficient.
+Every quality_metrics value is a quality score from 0.0 to 1.0, not a probability. A value of 1.0 means excellent quality or that the related defect is confidently absent or minimal; 0.0 means unacceptable quality or strong visible evidence of poor quality. For defect-related metrics such as mold, bruising, cracking, skin_damage, visible_decay, and discoloration, higher values mean the defect is absent or minimal. The defects array must contain only defects visibly supported by the crop. Use null only for overall_quality_score when evidence is insufficient.
+For status=ok, defects must be empty and the explanation must say that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
 The explanation must be one concise sentence grounded in visible evidence.
 Use this shape, replacing the example with the actual crop IDs:
 {{"items": [{{"crop_id": "CROP_001", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}]}}"""
@@ -167,7 +169,7 @@ class VLMBackend(ABC):
         status_val = str(data.get("status", "uncertain")).lower()
         if status_val not in [status.value for status in InspectionStatus]:
             status_val = "uncertain"
-        return QualityAssessment(
+        assessment = QualityAssessment(
             detected_class=data.get("detected_class"),
             status=InspectionStatus(status_val),
             overall_quality_score=data.get("overall_quality_score"),
@@ -177,6 +179,7 @@ class VLMBackend(ABC):
             required_action=RequiredAction(data.get("required_action", "none")),
             vlm_backend="pending",
         )
+        return VLMBackend._normalize_assessment(assessment)
 
     @staticmethod
     def _parse_collage_response(raw: str) -> dict[str, dict]:
@@ -206,10 +209,27 @@ class VLMBackend(ABC):
         if not isinstance(metrics, dict):
             return {}
         return {
-            str(name): float(value)
+            str(name): max(0.0, min(1.0, float(value)))
             for name, value in metrics.items()
             if isinstance(value, (int, float)) and not isinstance(value, bool)
         }
+
+    @staticmethod
+    def _normalize_assessment(assessment: QualityAssessment) -> QualityAssessment:
+        if assessment.status == InspectionStatus.UNCERTAIN:
+            assessment.overall_quality_score = None
+            assessment.quality_metrics = {}
+            assessment.required_action = RequiredAction.FLAG_FOR_REVIEW
+        elif assessment.status == InspectionStatus.OK and assessment.defects:
+            assessment.status = InspectionStatus.DEFECT
+            if assessment.required_action == RequiredAction.NONE:
+                assessment.required_action = RequiredAction.FLAG_FOR_REVIEW
+        elif assessment.status == InspectionStatus.DEFECT and not assessment.defects:
+            assessment.status = InspectionStatus.UNCERTAIN
+            assessment.overall_quality_score = None
+            assessment.quality_metrics = {}
+            assessment.required_action = RequiredAction.FLAG_FOR_REVIEW
+        return assessment
 
     @staticmethod
     def _parse_response(raw: str) -> QualityAssessment:
@@ -233,7 +253,7 @@ class VLMBackend(ABC):
         if status_val not in [s.value for s in InspectionStatus]:
             status_val = "uncertain"
 
-        return QualityAssessment(
+        assessment = QualityAssessment(
             detected_class=data.get("detected_class"),
             status=InspectionStatus(status_val),
             overall_quality_score=data.get("overall_quality_score"),
@@ -243,6 +263,7 @@ class VLMBackend(ABC):
             required_action=RequiredAction(data.get("required_action", "none")),
             vlm_backend="pending",
         )
+        return VLMBackend._normalize_assessment(assessment)
 
     @staticmethod
     def _fallback_assessment(error: str) -> QualityAssessment:

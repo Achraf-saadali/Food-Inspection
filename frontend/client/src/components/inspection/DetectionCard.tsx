@@ -128,7 +128,7 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Quality metrics */}
           {metricEntries.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Quality Metrics</p>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Quality scores · 1.0 = best quality / defect absent</p>
               <div className="space-y-2">
                 {metricEntries.map(([key, val]) => (
                   <ConfidenceBar key={key} value={val} label={key} size="sm" />
