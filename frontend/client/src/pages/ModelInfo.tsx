@@ -8,6 +8,7 @@ import { Cpu, Layers, Target, Zap, Shield, Brain, ChevronRight } from 'lucide-re
 import { getModelInfo } from '../api/inspectionApi';
 import type { ModelInfo } from '../types/inspection';
 import { ConfidenceBar } from '../components/inspection/ConfidenceBar';
+import { translateFoodLabel } from '../utils/inspection';
 
 const PIPELINE_STAGES = [
   {
@@ -66,8 +67,8 @@ export default function ModelInfo() {
         <div className="flex items-center gap-3">
           <div className="w-1 h-6 bg-primary" />
           <div>
-            <h1 className="text-xl font-bold text-foreground font-mono tracking-tight">MODEL INFORMATION</h1>
-            <p className="text-xs text-muted-foreground font-mono">TECHNICAL SPECS · AI PIPELINE ARCHITECTURE</p>
+            <h1 className="text-xl font-bold text-foreground font-mono tracking-tight">INFORMATIONS DU MODÈLE</h1>
+            <p className="text-xs text-muted-foreground font-mono">CARACTÉRISTIQUES · ARCHITECTURE DU PIPELINE IA</p>
           </div>
         </div>
       </div>
@@ -87,18 +88,18 @@ export default function ModelInfo() {
               </div>
             </div>
             <SpecRow label="Architecture" value={info.architecture} />
-            <SpecRow label="Input Resolution" value={info.input_size} />
+            <SpecRow label="Résolution d’entrée" value={info.input_size} />
             <SpecRow label="Classes" value={info.num_classes} />
-            <SpecRow label="Training Epochs" value={info.training_epochs} />
+            <SpecRow label="Époques d’entraînement" value={info.training_epochs} />
           </div>
 
           {/* Performance metrics */}
           <div className="rounded border border-border bg-card p-5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Performance Metrics</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Métriques de performance</h3>
             <div className="space-y-3">
               <ConfidenceBar value={info.map50 / 100} label={`mAP@50: ${info.map50}%`} showPercent={false} />
-              <ConfidenceBar value={info.precision / 100} label={`Precision: ${info.precision}%`} showPercent={false} />
-              <ConfidenceBar value={info.recall / 100} label={`Recall: ${info.recall}%`} showPercent={false} />
+              <ConfidenceBar value={info.precision / 100} label={`Précision : ${info.precision}%`} showPercent={false} />
+              <ConfidenceBar value={info.recall / 100} label={`Rappel : ${info.recall}%`} showPercent={false} />
             </div>
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
               Metrics are read from the committed final training-run record. The deployed class count and labels are read directly from the loaded detector.
@@ -107,7 +108,7 @@ export default function ModelInfo() {
 
           {/* VLM backends */}
           <div className="rounded border border-border bg-card p-5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">VLM Backends</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Moteurs VLM</h3>
             <div className="space-y-2">
               {info.vlm_backends.map((b) => (
                 <div key={b} className="flex items-center gap-2 py-1.5">
@@ -121,9 +122,9 @@ export default function ModelInfo() {
 
         {/* Right: pipeline + classes */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Pipeline diagram */}
+          {/* Chaîne de traitement diagram */}
           <div className="rounded border border-border bg-card p-5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-5">AI Pipeline Architecture</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-5">AI Chaîne de traitement Architecture</h3>
             <div className="space-y-3">
               {PIPELINE_STAGES.map((stage, i) => (
                 <div key={stage.step} className="flex gap-4">
@@ -156,9 +157,9 @@ export default function ModelInfo() {
           <div className="rounded border border-border bg-card p-5">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Detectable Classes ({info.class_names.length})
+                Classes détectables ({info.class_names.length})
               </h3>
-              <span className="text-xs font-mono text-muted-foreground">LOADED FROM DEPLOYED MODEL</span>
+              <span className="text-xs font-mono text-muted-foreground">CHARGÉES DEPUIS LE MODÈLE DÉPLOYÉ</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {info.class_names.map((cls) => (
@@ -166,7 +167,7 @@ export default function ModelInfo() {
                   key={cls}
                   className="text-xs font-mono px-2 py-0.5 rounded border border-border bg-secondary text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors capitalize"
                 >
-                  {cls}
+                  {translateFoodLabel(cls)}
                 </span>
               ))}
             </div>
@@ -174,14 +175,14 @@ export default function ModelInfo() {
 
           {/* API reference */}
           <div className="rounded border border-border bg-card p-5">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">API Reference</h3>
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Référence API</h3>
             <div className="space-y-3">
               {[
                 { method: 'POST', path: '/detect', desc: 'YOLO detection only — fast, no VLM cost', color: '#60a5fa' },
-                { method: 'POST', path: '/inspect', desc: 'Full pipeline: YOLO + VLM quality reasoning', color: '#22c55e' },
-                { method: 'GET', path: '/reports', desc: 'Saved inspection history from SQLite', color: '#a78bfa' },
-                { method: 'GET', path: '/reports/summary', desc: 'Live quality and defect metrics', color: '#34d399' },
-                { method: 'GET', path: '/health', desc: 'Backend health check', color: '#f59e0b' },
+                { method: 'POST', path: '/inspect', desc: 'Pipeline complet : raisonnement qualité YOLO + VLM', color: '#22c55e' },
+                { method: 'GET', path: '/reports', desc: 'Historique des inspections enregistré dans SQLite', color: '#a78bfa' },
+                { method: 'GET', path: '/reports/summary', desc: 'Métriques qualité et défauts en direct', color: '#34d399' },
+                { method: 'GET', path: '/health', desc: 'Vérification de l’état du serveur', color: '#f59e0b' },
               ].map((ep) => (
                 <div key={ep.path} className="flex items-start gap-3 p-3 rounded bg-secondary/50 border border-border">
                   <span

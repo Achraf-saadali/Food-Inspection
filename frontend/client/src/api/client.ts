@@ -14,7 +14,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   // 120s timeout for the polling calls — individual poll requests are fast,
-  // but the overall inspection can take 60-90s for many VLM detections.
+  // but the overall inspection can take 60-90s for many VLM détection(s).
   // The /inspect endpoint itself returns immediately with a job_id.
   timeout: 120_000,
   headers: {
@@ -38,7 +38,7 @@ apiClient.interceptors.response.use(
       error.response?.data?.detail ||
       error.response?.data?.message ||
       error.message ||
-      'Unknown API error';
+      'Erreur API inconnue';
     return Promise.reject(new Error(message));
   }
 );

@@ -41,7 +41,7 @@ DEFAULT_VLM_CONF_GATE = 0.6
 TRACK_GRACE_SECONDS = 5.0
 CENTER_MATCH_DISTANCE = 1.5
 VLM_RESULT_TIMEOUT_SECONDS = 40.0
-WAITING_EXPLANATION = "Waiting for VLM inspection."
+WAITING_EXPLANATION = "En attente de l’inspection qualité."
 
 env_path = PROJECT_ROOT / ".env"
 load_dotenv(dotenv_path=env_path if env_path.exists() else None)
@@ -68,7 +68,7 @@ class FoodInspectionApp:
     ):
         self.model_path = Path(model_path)
         if not self.model_path.exists():
-            raise FileNotFoundError(f"Model weights not found at: {self.model_path}")
+            raise FileNotFoundError(f"Poids du modèle introuvables à : {self.model_path}")
 
         print(f"[INFO] Loading YOLO model from {self.model_path} ...")
         self.model = YOLO(str(self.model_path))
@@ -82,7 +82,7 @@ class FoodInspectionApp:
             try:
                 self.vlm_backend = get_backend(vlm_backend_name, model=vlm_model)
             except Exception as exc:
-                print(f"[ERROR] Failed to load VLM backend: {exc}")
+                print(f"[ERROR] Impossible de charger le moteur VLM : {exc}")
                 print("[WARN] Proceeding with detection only.")
 
         self.source = source
@@ -110,7 +110,7 @@ class FoodInspectionApp:
         source = int(self.source) if isinstance(self.source, str) and self.source.isdigit() else self.source
         self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open video source: {source}")
+            raise RuntimeError(f"Impossible d’ouvrir la source vidéo : {source}")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
@@ -206,7 +206,7 @@ class FoodInspectionApp:
                         overall_quality_score=None,
                         quality_metrics={},
                         defects=[],
-                        explanation="VLM inspection timed out; manual review is required.",
+                        explanation="L’inspection qualité a dépassé le délai ; une vérification manuelle est nécessaire.",
                         required_action=RequiredAction.FLAG_FOR_REVIEW,
                         vlm_backend=self.vlm_backend.name if self.vlm_backend else "none",
                     )
@@ -227,7 +227,7 @@ class FoodInspectionApp:
                     overall_quality_score=None,
                     quality_metrics={},
                     defects=[],
-                    explanation=f"VLM inspection failed: {exc}",
+                    explanation=f"L’inspection qualité a échoué : {exc}",
                     required_action=RequiredAction.FLAG_FOR_REVIEW,
                     vlm_backend=self.vlm_backend.name if self.vlm_backend else "none",
                 )
@@ -250,7 +250,7 @@ class FoodInspectionApp:
             quality_metrics={},
             defects=[],
             explanation=WAITING_EXPLANATION,
-            commentary="Waiting for inspection. The detected item is queued for VLM quality analysis.",
+            commentary="Inspection en attente. Le produit détecté est en file pour l’analyse qualité.",
             required_action=RequiredAction.NONE,
             vlm_backend=self.vlm_backend.name if self.vlm_backend else "none",
         )
@@ -275,9 +275,9 @@ class FoodInspectionApp:
         bbox_xyxy: List[float],
     ) -> QualityAssessment:
         if self.vlm_backend is None or self._vlm_executor is None:
-            return self._skipped_quality("Detection only: VLM inspection is disabled.")
+            return self._skipped_quality("Détection seule : l’inspection qualité est désactivée.")
         if confidence < self.vlm_conf_gate:
-            return self._skipped_quality("Detection only: confidence is below the VLM inspection gate.")
+            return self._skipped_quality("Détection seule : la confiance est inférieure au seuil d’inspection qualité.")
 
         track_id = self._match_track(label, bbox_xyxy)
         track = self._tracks[track_id]
@@ -382,7 +382,7 @@ class FoodInspectionApp:
 
             text_y = min(frame.shape[0] - 8, y2 + 18)
             if waiting:
-                self._draw_text(frame, "Waiting for inspection...", (x1, text_y), color, scale=0.48)
+                self._draw_text(frame, "En attente de l’inspection…", (x1, text_y), color, scale=0.48)
                 continue
 
             if quality.status == InspectionStatus.SKIPPED:

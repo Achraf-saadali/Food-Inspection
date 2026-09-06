@@ -18,10 +18,10 @@ type InspectionMode = 'detect' | 'inspect';
  */
 export type InspectionStage =
   | null
-  | 'Uploading image...'
-  | 'YOLO detecting...'
-  | 'Analyzing with VLM...'
-  | 'Complete';
+  | 'Téléversement de l’image…'
+  | 'Détection YOLO…'
+  | 'Analyse avec le VLM…'
+  | 'Terminé';
 
 interface UseInspectionReturn {
   result: InspectionResult | null;
@@ -41,12 +41,12 @@ export function useInspection(): UseInspectionReturn {
   const run = useCallback(
     async (file: File, mode: InspectionMode = 'inspect', signal?: AbortSignal) => {
       setIsLoading(true);
-      setStage('Uploading image...');
+      setStage('Téléversement de l’image…');
       setError(null);
       try {
         let completedResult: InspectionResult;
         if (mode === 'detect') {
-          setStage('YOLO detecting...');
+          setStage('Détection YOLO…');
           const res = await detectImage(file, signal);
           setResult(res);
           completedResult = res;
@@ -64,23 +64,23 @@ export function useInspection(): UseInspectionReturn {
           setResult(res);
           completedResult = res;
         }
-        setStage('Complete');
+        setStage('Terminé');
         return completedResult;
       } catch (err) {
         if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
           return null;
         }
-        let msg = 'Inspection failed';
+        let msg = 'L’inspection a échoué.';
         if (err instanceof Error) {
           msg = err.message;
         }
         // Provide more helpful messages for common failures
         if (msg.includes('timeout') || msg.includes('Timeout')) {
-          msg = 'The inspection timed out. The VLM API may be slow or unreachable. Try again or switch to YOLO-only mode.';
+          msg = 'L’inspection a dépassé le délai. L’API VLM est peut-être lente ou inaccessible. Réessayez ou utilisez le mode YOLO seul.';
         } else if (msg.includes('Network Error') || msg.includes('ECONNREFUSED')) {
-          msg = 'Cannot connect to the backend. Make sure the FastAPI server is running at http://localhost:8000.';
+          msg = 'Impossible de joindre le serveur. Vérifiez que FastAPI fonctionne sur http://localhost:8000.';
         } else if (msg.includes('404')) {
-          msg = 'Backend endpoint not found. Make sure you are running uvicorn backend.api:app from the repository root.';
+          msg = 'Point d’accès serveur introuvable. Lancez uvicorn backend.api:app depuis la racine du dépôt.';
         }
         setError(msg);
         return null;

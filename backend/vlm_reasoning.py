@@ -33,19 +33,19 @@ ACTIVE_OPENROUTER_MODEL = "openrouter/free"
 
 QUALITY_PROMPT_TEMPLATE = """{provider_guidance}
 
-Inspect the attached image crop. A detector identified it as "{label}" with confidence {confidence:.2f}.
+Inspecte le recadrage fourni. Le détecteur l’a identifié comme « {label} » avec une confiance de {confidence:.2f}.
 Assess only visible quality evidence. The applicable quality metrics are:
 {metrics_list}
 
-Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble.
+Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble. Rédige toutes les valeurs textuelles destinées à l’utilisateur en français.
 Use these exact keys: detected_class, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
 Allowed status values are exactly: ok, defect, uncertain.
 Allowed required_action values are exactly: none, flag_for_review, remove.
 Every quality_metrics value is a direct defect-likelihood probability from 0.0 to 1.0 for that specific metric, not a general quality score. Interpret each metric independently: 0.0 means the named defect or condition is maximally unlikely or absent, 1.0 means it is maximally likely or visibly present, and intermediate values represent the corresponding likelihood. Higher values therefore mean higher likelihood that the named defect exists. The defects array must contain only defects visibly supported by the crop. Use null only for overall_quality_score when evidence is insufficient.
-For status=ok, defects must be empty and the explanation must say that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
+For status=ok, defects must be empty and the explanation must say in French that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them in French using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation in French. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
 The explanation must be one concise sentence grounded in visible evidence.
 The JSON object must have this shape:
-{{"detected_class": "{label}", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{{metrics_json_schema}}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}"""
+{{"detected_class": "{label}", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{{metrics_json_schema}}}, "defects": [], "explanation": "Éléments visuels insuffisants.", "required_action": "flag_for_review"}}"""
 
 COLLAGE_PROMPT_TEMPLATE = """{provider_guidance}
 
@@ -55,16 +55,16 @@ Analyze each panel independently. Each panel has a printed crop_id. Do not merge
 Crop instructions:
 {crop_context}
 
-Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble.
+Return exactly one JSON object and nothing else. Do not use Markdown fences, commentary, or a preamble. Rédige toutes les valeurs textuelles destinées à l’utilisateur en français.
 The top-level object must contain exactly one key named items. items must be an array with one object for every crop_id.
 Each item must contain exactly these keys: crop_id, status, overall_quality_score, quality_metrics, defects, explanation, required_action.
 Allowed status values are exactly: ok, defect, uncertain.
 Allowed required_action values are exactly: none, flag_for_review, remove.
 Every quality_metrics value is a direct defect-likelihood probability from 0.0 to 1.0 for that specific metric, not a general quality score. Interpret each metric independently: 0.0 means the named defect or condition is maximally unlikely or absent, 1.0 means it is maximally likely or visibly present, and intermediate values represent the corresponding likelihood. Higher values therefore mean higher likelihood that the named defect exists. The defects array must contain only defects visibly supported by the crop. Use null only for overall_quality_score when evidence is insufficient.
-For status=ok, defects must be empty and the explanation must say that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
+For status=ok, defects must be empty and the explanation must say in French that no visible defects were found. For status=defect, defects must contain every visibly supported defect and the explanation must mention them in French using concrete visual evidence. For status=uncertain, overall_quality_score must be null, quality_metrics must be empty, required_action must be flag_for_review, and the explanation must identify the limitation in French. Blur, occlusion, very small crops, poor lighting, or insufficient visual evidence must never produce a confident OK result. Do not mention blur, uncertainty, or insufficient evidence in an OK explanation, and do not claim no defects when defects is non-empty.
 The explanation must be one concise sentence grounded in visible evidence.
 Use this shape, replacing the example with the actual crop IDs:
-{{"items": [{{"crop_id": "CROP_001", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{}}, "defects": [], "explanation": "Insufficient visible evidence.", "required_action": "flag_for_review"}}]}}"""
+{{"items": [{{"crop_id": "CROP_001", "status": "uncertain", "overall_quality_score": null, "quality_metrics": {{}}, "defects": [], "explanation": "Éléments visuels insuffisants.", "required_action": "flag_for_review"}}]}}"""
 
 
 class VLMBackend(ABC):
@@ -97,7 +97,7 @@ class VLMBackend(ABC):
         raise NotImplementedError
 
     def _provider_guidance(self) -> str:
-        return "Follow the requested output contract exactly."
+        return "Respecte exactement le format de sortie demandé et rédige les textes en français."
 
     def analyze(
         self, crop: np.ndarray, label: str, confidence: float
@@ -151,7 +151,7 @@ class VLMBackend(ABC):
                 item = data.get(crop_id)
                 try:
                     if item is None:
-                        raise ValueError(f"VLM response omitted {crop_id}.")
+                        raise ValueError(f"La réponse VLM ne contient pas {crop_id}.")
                     assessments[crop_id] = self._assessment_from_data(item)
                 except Exception as exc:  # noqa: BLE001 - isolate malformed crop results
                     assessments[crop_id] = self._fallback_assessment(str(exc))
@@ -191,7 +191,7 @@ class VLMBackend(ABC):
         start_idx = cleaned.find("{")
         end_idx = cleaned.rfind("}")
         if start_idx == -1 or end_idx == -1:
-            raise ValueError("VLM response did not contain a JSON object.")
+            raise ValueError("La réponse VLM ne contient pas d’objet JSON.")
         payload = json.loads(cleaned[start_idx:end_idx + 1])
         return {
             str(item["crop_id"]): item
@@ -272,7 +272,7 @@ class VLMBackend(ABC):
             overall_quality_score=None,
             quality_metrics={},
             defects=[],
-            explanation=f"VLM response could not be parsed: {error}",
+            explanation=f"La réponse du modèle n’a pas pu être interprétée : {error}",
             required_action=RequiredAction.FLAG_FOR_REVIEW,
             vlm_backend="pending",
         )
@@ -284,7 +284,7 @@ class GPT4VLMBackend(VLMBackend):
     name = "gpt-4o"
 
     def _provider_guidance(self) -> str:
-        return "You are a vision classifier using an OpenAI-compatible API. Follow the JSON contract exactly; return JSON only."
+        return "Tu es un classificateur visuel utilisant une API compatible OpenAI. Respecte exactement le contrat JSON, renvoie uniquement le JSON et rédige les textes en français."
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
         import os
@@ -293,7 +293,7 @@ class GPT4VLMBackend(VLMBackend):
 
         api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment or arguments.")
+            raise ValueError("OPENAI_API_KEY introuvable dans l’environnement ou les arguments.")
 
         self.client = OpenAI(api_key=api_key, timeout=30.0, max_retries=0)
         self.model = model
@@ -305,7 +305,7 @@ class GPT4VLMBackend(VLMBackend):
 
         ok, buf = cv2.imencode(".jpg", crop)
         if not ok:
-            raise RuntimeError("Failed to encode crop as JPEG")
+            raise RuntimeError("Impossible d’encoder le recadrage en JPEG")
         b64_image = base64.b64encode(buf).decode("utf-8")
 
         response = self.client.chat.completions.create(
@@ -335,8 +335,8 @@ class GeminiVLMBackend(VLMBackend):
 
     def _provider_guidance(self) -> str:
         return (
-            "You are Gemma 4 running through the native Google AI Studio API. "
-            "Do not reveal reasoning or thought text. Return only the final JSON object."
+            "Tu es Gemma 4 exécuté via l’API Google AI Studio. "
+            "Ne révèle pas ton raisonnement. Renvoie uniquement l’objet JSON final avec des textes en français."
         )
 
     def __init__(
@@ -353,7 +353,7 @@ class GeminiVLMBackend(VLMBackend):
         )
         if not self.api_key:
             raise ValueError(
-                "GEMINI_API_KEY or GEMMA_API_KEY not found in environment."
+                "GEMINI_API_KEY ou GEMMA_API_KEY introuvable dans l’environnement."
             )
 
         self.base_url = os.getenv(
@@ -377,7 +377,7 @@ class GeminiVLMBackend(VLMBackend):
 
         ok, buf = cv2.imencode(".jpg", crop)
         if not ok:
-            raise RuntimeError("Failed to encode crop as JPEG")
+            raise RuntimeError("Impossible d’encoder le recadrage en JPEG")
 
         response = requests.post(
             f"{self.base_url}/models/{self.model}:generateContent",
@@ -447,7 +447,7 @@ class OpenRouterBackend(VLMBackend):
     name = "openrouter"
 
     def _provider_guidance(self) -> str:
-        return "You are a hosted multimodal model behind an OpenAI-compatible API. Return only the requested JSON object."
+        return "Tu es un modèle multimodal hébergé derrière une API compatible OpenAI. Renvoie uniquement l’objet JSON demandé et rédige les textes en français."
 
     def __init__(self, api_key: Optional[str] = None, model: str = ACTIVE_OPENROUTER_MODEL):
         import os
@@ -455,7 +455,7 @@ class OpenRouterBackend(VLMBackend):
 
         api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            raise ValueError("OPENROUTER_API_KEY not found in environment.")
+            raise ValueError("OPENROUTER_API_KEY introuvable dans l’environnement.")
 
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
@@ -471,7 +471,7 @@ class OpenRouterBackend(VLMBackend):
 
         ok, buf = cv2.imencode(".jpg", crop)
         if not ok:
-            raise RuntimeError("Failed to encode crop as JPEG")
+            raise RuntimeError("Impossible d’encoder le recadrage en JPEG")
         b64_image = base64.b64encode(buf).decode("utf-8")
 
         response = self.client.chat.completions.create(
@@ -496,6 +496,5 @@ class OpenRouterBackend(VLMBackend):
 def get_backend(name: str, model: Optional[str] = None) -> VLMBackend:
     """Return only the Google AI Studio Gemini backend."""
     return GeminiVLMBackend()
-
 
 

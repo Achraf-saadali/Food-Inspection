@@ -35,9 +35,9 @@ export function Sidebar() {
         </div>
         <div>
           <p className="text-sm font-bold text-foreground font-mono tracking-tight">
-            FoodScan AI
+            FoodScan IA
           </p>
-          <p className="text-xs text-primary/70 font-mono">INSPECTION PLATFORM</p>
+          <p className="text-xs text-primary/70 font-mono">PLATEFORME D’INSPECTION</p>
         </div>
       </div>
 
@@ -72,7 +72,7 @@ export function Sidebar() {
       <div className="px-4 py-4 border-t border-border">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse" />
-          <span className="text-xs text-muted-foreground font-mono">SYSTEM ONLINE</span>
+          <span className="text-xs text-muted-foreground font-mono">SYSTÈME EN LIGNE</span>
         </div>
         <p className="text-xs text-muted-foreground mt-1 font-mono">YOLOv9c · 63 CLASSES</p>
       </div>

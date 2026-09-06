@@ -5,6 +5,26 @@
 
 import type { InspectionStatus, RequiredAction } from '../types/inspection';
 
+const FOOD_LABELS: Record<string, string> = {
+  apple: 'Pomme', banana: 'Banane', carrot: 'Carotte', cucumber: 'Concombre',
+  orange: 'Orange', pepper: 'Poivron', potato: 'Pomme de terre', tomato: 'Tomate',
+};
+
+const DEFECT_LABELS: Record<string, string> = {
+  bruising: 'Meurtrissure', discoloration: 'Décoloration', freshness: 'Fraîcheur insuffisante',
+  mold: 'Moisissure', none: 'Aucun défaut identifié', other: 'Autre problème visible',
+};
+
+export function translateFoodLabel(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  return FOOD_LABELS[normalized] ?? label.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+}
+
+export function translateDefectLabel(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  return DEFECT_LABELS[normalized] ?? label.replace(/_/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
+}
+
 export function getStatusColor(status: InspectionStatus): string {
   switch (status) {
     case 'ok': return '#22c55e';        // emerald green
@@ -16,10 +36,10 @@ export function getStatusColor(status: InspectionStatus): string {
 
 export function getStatusLabel(status: InspectionStatus): string {
   switch (status) {
-    case 'ok': return 'PASS';
-    case 'defect': return 'DEFECT';
-    case 'uncertain': return 'UNCERTAIN';
-    case 'skipped': return 'SKIPPED';
+    case 'ok': return 'ACCEPTABLE';
+    case 'defect': return 'DÉFAUT';
+    case 'uncertain': return 'À VÉRIFIER';
+    case 'skipped': return 'NON ÉVALUÉ';
   }
 }
 
@@ -52,9 +72,9 @@ export function getStatusBorderClass(status: InspectionStatus): string {
 
 export function getActionLabel(action: RequiredAction): string {
   switch (action) {
-    case 'none': return 'No Action';
-    case 'flag_for_review': return 'Flag for Review';
-    case 'remove': return 'Remove from Line';
+    case 'none': return 'Aucune action';
+    case 'flag_for_review': return 'Vérifier manuellement';
+    case 'remove': return 'Isoler du lot';
   }
 }
 
@@ -70,8 +90,8 @@ export function formatConfidence(conf: number): string {
   return `${(conf * 100).toFixed(1)}%`;
 }
 
-export function formatScore(score: number | null): string {
-  if (score === null) return 'N/A';
+export function formatScore(score : number | null): string {
+  if (score === null) return 'Non disponible';
   return score.toFixed(3);
 }
 
@@ -83,7 +103,7 @@ export function formatLatency(ms: number | null): string {
 
 export function formatTimestamp(ts: string): string {
   const d = new Date(ts);
-  return d.toLocaleString('en-US', {
+  return d.toLocaleString('fr-FR', {
     month: 'short', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
     hour12: false,

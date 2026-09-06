@@ -55,38 +55,38 @@ export async function inspectImage(
   options?: { confidence_gate?: number; vlm_backend?: string; vlm_model?: string; signal?: AbortSignal },
   onProgress?: (stage: string) => void,
 ): Promise<InspectionResult> {
-  onProgress?.('Uploading image...');
+  onProgress?.('Téléversement de l’image…');
   const { job_id } = await submitInspectJob(file, options);
-  onProgress?.('YOLO detecting...');
+  onProgress?.('Détection YOLO…');
 
   const pollIntervalMs = 1000;
   const maxWaitMs = 120_000;
-  const startTime = Date.now();
+  const startDate = Date.now();
 
-  while (Date.now() - startTime < maxWaitMs) {
+  while (Date.now() - startDate < maxWaitMs) {
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(resolve, pollIntervalMs);
       options?.signal?.addEventListener('abort', () => {
         window.clearTimeout(timeout);
-        reject(new DOMException('Inspection cancelled', 'AbortError'));
+        reject(new DOMException('Inspection annulée', 'AbortError'));
       }, { once: true });
     });
     const response = await pollInspectStatus(job_id, options?.signal);
     if (response.status === 'processing') {
-      onProgress?.('Analyzing with VLM...');
+      onProgress?.('Analyse avec le VLM…');
       continue;
     }
     if (response.status === 'completed') {
-      onProgress?.('Complete');
-      if (!response.result) throw new Error('The inspection completed without a result.');
+      onProgress?.('Terminé');
+      if (!response.result) throw new Error('L’inspection est terminée sans résultat.');
       return response.result;
     }
     if (response.status === 'failed') {
-      throw new Error(response.error || 'Inspection job failed on the server.');
+      throw new Error(response.error || 'La tâche d’inspection a échoué sur le serveur.');
     }
   }
 
-  throw new Error('Inspection timed out after 2 minutes. The server may be overloaded.');
+  throw new Error('L’inspection a dépassé deux minutes. Le serveur est peut-être surchargé.');
 }
 
 export async function checkHealth(): Promise<HealthStatus> {

@@ -29,7 +29,7 @@ import type {
   InspectionStats,
   InspectionStatus,
 } from '../types/inspection';
-import { formatTimestamp } from '../utils/inspection';
+import { formatTimestamp, translateDefectLabel, translateFoodLabel } from '../utils/inspection';
 import { StatusBadge } from '../components/inspection/StatusBadge';
 import { DetectionCard } from '../components/inspection/DetectionCard';
 
@@ -266,7 +266,7 @@ export default function Reports() {
       {stats && stats.defect_breakdown.length > 0 && (
         <div className="border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3"><AlertTriangle className="w-4 h-4 text-[#ef4444]" /><h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Problèmes les plus fréquents</h2></div>
-          <div className="flex flex-wrap gap-2">{stats.defect_breakdown.map(({ defect, count }) => <span key={defect} className="px-2.5 py-1 text-xs border border-[#ef444440] bg-[#ef444410] text-[#ef4444]">{defect.replace(/_/g, ' ')} · {count}</span>)}</div>
+          <div className="flex flex-wrap gap-2">{stats.defect_breakdown.map(({ defect, count }) => <span key={defect} className="px-2.5 py-1 text-xs border border-[#ef444440] bg-[#ef444410] text-[#ef4444]">{translateDefectLabel(defect)} · {count}</span>)}</div>
         </div>
       )}
 
@@ -279,7 +279,7 @@ export default function Reports() {
       {loading ? <div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div> : (
         <div className="border border-border bg-card overflow-hidden">
           <div className="grid grid-cols-12 gap-2 px-4 py-2.5 border-b border-border bg-secondary/50">
-            <button className="col-span-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground" onClick={() => toggleSort('frame_id')}>Frame <SortIcon sort="frame_id" /></button>
+            <button className="col-span-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground" onClick={() => toggleSort('frame_id')}>Image <SortIcon sort="frame_id" /></button>
             <button className="col-span-3 flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground" onClick={() => toggleSort('timestamp')}>Date <SortIcon sort="timestamp" /></button>
             <button className="col-span-2 flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground" onClick={() => toggleSort('num_detections')}>Produits <SortIcon sort="num_detections" /></button>
             <div className="col-span-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Types</div><div className="col-span-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">État</div><div className="col-span-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Actions</div>
@@ -304,7 +304,7 @@ export default function Reports() {
                     <div className="col-span-1 flex items-center gap-1.5"><button onClick={(event) => { event.stopPropagation(); setJsonView(isJsonView ? null : key); }} className="p-1 text-muted-foreground hover:text-foreground text-xs" title="Voir le JSON">{'{}'}</button><button onClick={(event) => { event.stopPropagation(); downloadJson(result); }} className="p-1 text-muted-foreground hover:text-foreground" title="Télécharger le JSON"><Download className="w-3.5 h-3.5" /></button></div>
                   </div>
                   {isExpanded && <div className="px-4 pb-4 space-y-4 bg-secondary/20 border-t border-border">
-                    <div className="pt-3"><p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Rapport farmer</p>{farmerLoading[key] ? <div className="py-8 text-center text-sm text-muted-foreground">Génération du rapport...</div> : farmerReport ? <FarmerReportView report={farmerReport} /> : <div className="py-8 text-center text-sm text-muted-foreground">Rapport farmer indisponible pour cette inspection.</div>}</div>
+                    <div className="pt-3"><p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Rapport synthétique</p>{farmerLoading[key] ? <div className="py-8 text-center text-sm text-muted-foreground">Génération du rapport...</div> : farmerReport ? <FarmerReportView report={farmerReport} /> : <div className="py-8 text-center text-sm text-muted-foreground">Rapport synthétique indisponible pour cette inspection.</div>}</div>
                     <details className="border border-border bg-card"><summary className="cursor-pointer px-3 py-2 text-xs uppercase tracking-wider text-muted-foreground">Détails techniques</summary><div className="p-3 space-y-3">{result.items.length === 0 ? <p className="text-sm text-muted-foreground">Aucun produit détecté dans cette image.</p> : result.items.map((item, index) => <DetectionCard key={index} item={item} index={index} />)}</div></details>
                   </div>}
                   {isJsonView && <div className="px-4 pb-4 bg-secondary/20 border-t border-border"><pre className="text-xs text-foreground overflow-auto max-h-64 mt-3 p-3 bg-background border border-border">{JSON.stringify(result, null, 2)}</pre></div>}

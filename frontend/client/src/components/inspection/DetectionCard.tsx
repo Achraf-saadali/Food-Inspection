@@ -17,6 +17,8 @@ import {
   formatScore,
   formatLatency,
   formatBbox,
+  translateFoodLabel,
+  translateDefectLabel,
 } from '../../utils/inspection';
 import { StatusBadge } from './StatusBadge';
 import { ConfidenceBar } from './ConfidenceBar';
@@ -61,17 +63,17 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-foreground capitalize truncate" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-              {det.display_label || det.label}
+              {translateFoodLabel(det.display_label || det.label)}
             </span>
             <span className="text-xs text-muted-foreground font-mono">#{det.class_id}</span>
           </div>
           <div className="flex items-center gap-3 mt-0.5">
             <span className="text-xs font-mono text-muted-foreground">
-              conf: <span style={{ color: statusColor }}>{formatConfidence(det.confidence)}</span>
+              confiance : <span style={{ color: statusColor }}>{formatConfidence(det.confidence)}</span>
             </span>
             {q.overall_quality_score !== null && (
               <span className="text-xs font-mono text-muted-foreground">
-                score: <span style={{ color: statusColor }}>{formatScore(q.overall_quality_score)}</span>
+                score : <span style={{ color: statusColor }}>{formatScore(q.overall_quality_score)}</span>
               </span>
             )}
           </div>
@@ -88,7 +90,7 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Farmer-facing decision derived from the structured assessment. */}
           {q.commentary && (
             <div className="pt-3 px-3 py-2.5 border border-primary/25 bg-primary/5">
-              <p className="text-xs text-primary mb-1 uppercase tracking-wider font-mono">Quality summary</p>
+              <p className="text-xs text-primary mb-1 uppercase tracking-wider font-mono">Résumé qualité</p>
               <p className="text-sm text-foreground leading-relaxed">{q.commentary}</p>
             </div>
           )}
@@ -96,7 +98,7 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Raw VLM explanation remains available for traceability. */}
           {q.explanation && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Visual evidence</p>
+              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Éléments visuels</p>
               <p className="text-sm text-foreground leading-relaxed">{q.explanation}</p>
             </div>
           )}
@@ -114,11 +116,11 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Defects */}
           {q.defects.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Defects Detected</p>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Défauts détectés</p>
               <div className="flex flex-wrap gap-1.5">
                 {q.defects.map((d) => (
                   <span key={d} className="text-xs px-2 py-0.5 rounded font-mono bg-[#ef444420] text-[#ef4444] border border-[#ef444440]">
-                    {d.replace(/_/g, ' ')}
+                    {translateDefectLabel(d)}
                   </span>
                 ))}
               </div>
@@ -128,7 +130,7 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Quality metrics */}
           {metricEntries.length > 0 && (
             <div>
-              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Quality scores · 1.0 = best quality / defect absent</p>
+              <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Scores qualité · 1,0 = meilleure qualité / défaut absent</p>
               <div className="space-y-2">
                 {metricEntries.map(([key, val]) => (
                   <ConfidenceBar key={key} value={val} label={key} size="sm" />
@@ -140,17 +142,17 @@ export function DetectionCard({ item, index, className }: DetectionCardProps) {
           {/* Bounding box & metadata */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Bounding Box</p>
+              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Boîte englobante</p>
               <p className="text-xs font-mono text-foreground">{formatBbox(det.bbox_xyxy)}</p>
               <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                norm: {formatBbox(det.bbox_normalized)}
+                normalisée : {formatBbox(det.bbox_normalized)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Pipeline</p>
+              <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">Chaîne de traitement</p>
               <p className="text-xs font-mono text-foreground">VLM: {q.vlm_backend}</p>
               <p className="text-xs font-mono text-muted-foreground mt-0.5">
-                latency: {formatLatency(q.latency_ms)}
+                latence : {formatLatency(q.latency_ms)}
               </p>
             </div>
           </div>

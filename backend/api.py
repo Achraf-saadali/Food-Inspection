@@ -82,7 +82,7 @@ def _decode_upload(raw_bytes: bytes) -> np.ndarray:
     array = np.frombuffer(raw_bytes, dtype=np.uint8)
     image = cv2.imdecode(array, cv2.IMREAD_COLOR)
     if image is None:
-        raise HTTPException(status_code=400, detail="Could not decode image")
+        raise HTTPException(status_code=400, detail="Impossible de décoder l’image")
     return image
 
 
@@ -181,7 +181,7 @@ async def inspect(
 @app.get("/inspect/status/{job_id}")
 async def get_inspection_status(job_id: str):
     if job_id not in _jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
+        raise HTTPException(status_code=404, detail="Tâche introuvable")
     
     job = _jobs[job_id]
     if job["status"] == "completed":
@@ -219,7 +219,7 @@ async def reports_export() -> list[dict]:
 async def farmer_report_detail(report_id: str) -> dict:
     report = get_report(report_id)
     if report is None:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Rapport introuvable")
     return {"inspection": report.model_dump(mode="json"), "farmer_report": build_farmer_report(report)}
 
 
@@ -227,7 +227,7 @@ async def farmer_report_detail(report_id: str) -> dict:
 async def report_detail(report_id: str) -> InspectionResult:
     report = get_report(report_id)
     if report is None:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Rapport introuvable")
     return report
 
 
@@ -240,7 +240,7 @@ async def model_info() -> dict:
         final_metrics = list(csv.DictReader(results_file))[-1]
     model = get_yolo_model()
     return {
-        "name": "Food Inspection YOLO Detector",
+        "name": "Détecteur YOLO pour l’inspection alimentaire",
         "version": "lvis_fruits_yolo11m_80_v1",
         "architecture": str(training_args.get("model", "YOLO detector")),
         "num_classes": len(model.names),

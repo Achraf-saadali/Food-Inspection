@@ -43,7 +43,7 @@ def run_live(
     vlm_backend = get_backend(vlm_backend_name, model=vlm_model) if vlm_backend_name else None
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
-        raise RuntimeError(f"Could not open camera/video source: {source}")
+        raise RuntimeError(f"Impossible d’ouvrir la source caméra/vidéo : {source}")
 
     output_file = output_path.open("a", encoding="utf-8") if output_path else None
     frame_id = 0

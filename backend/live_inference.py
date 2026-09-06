@@ -65,7 +65,7 @@ class LiveIngredientDetector:
         self.model_path = Path(model_path)
         if not self.model_path.exists():
             raise FileNotFoundError(
-                f"Model weights not found at: {self.model_path}\n"
+                f"Poids du modèle introuvables à : {self.model_path}\n"
                 f"Copy your trained weights there, e.g.:\n"
                 f"  cp the second-experiment best.pt checkpoint models/best.pt"
             )
@@ -119,7 +119,7 @@ class LiveIngredientDetector:
 
         self.cap = cv2.VideoCapture(resolved)
         if not self.cap.isOpened():
-            raise RuntimeError(f"Could not open video source: {resolved}")
+            raise RuntimeError(f"Impossible d’ouvrir la source vidéo : {resolved}")
 
     # ----------------------------------------------------------------- #
     # Detection -> JSON
@@ -184,7 +184,7 @@ class LiveIngredientDetector:
         img_path = self._resolve_source()
         frame = cv2.imread(img_path)
         if frame is None:
-            raise FileNotFoundError(f"Could not read image: {img_path}")
+            raise FileNotFoundError(f"Impossible de lire l’image : {img_path}")
 
         self.frame_id += 1
         result = self.model.predict(frame, conf=self.conf, iou=self.iou, verbose=False)[0]
@@ -211,7 +211,7 @@ class LiveIngredientDetector:
             while True:
                 ok, frame = self.cap.read()
                 if not ok:
-                    print("[WARN] Failed to grab frame — stream ended or camera disconnected.")
+                    print("[AVERTISSEMENT] Impossible de récupérer l’image — flux terminé ou caméra déconnectée.")
                     break
 
                 self.frame_id += 1

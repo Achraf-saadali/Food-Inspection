@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { getInspectionStats, getInspectionHistory, checkHealth } from '../api/inspectionApi';
 import type { InspectionStats, InspectionResult, HealthStatus } from '../types/inspection';
-import { formatTimestamp, getStatusColor } from '../utils/inspection';
+import { formatTimestamp, getStatusColor, translateFoodLabel } from '../utils/inspection';
 import { StatusBadge } from '../components/inspection/StatusBadge';
 
 const STATUS_COLORS = {
@@ -55,7 +55,7 @@ function MetricCard({
         </div>
         {href && (
           <div className="flex items-center gap-1 mt-4 text-xs font-mono" style={{ color }}>
-            <span>VIEW DETAILS</span>
+            <span>VOIR LES DÉTAILS</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
           </div>
         )}
@@ -87,17 +87,17 @@ export default function Dashboard() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-muted-foreground font-mono tracking-widest">LOADING SYSTEM DATA...</p>
+          <p className="text-xs text-muted-foreground font-mono tracking-widest">CHARGEMENT DES DONNÉES DU SYSTÈME…</p>
         </div>
       </div>
     );
   }
 
   const pieData = [
-    { name: 'PASS', value: stats.ok_count, color: STATUS_COLORS.ok },
-    { name: 'DEFECT', value: stats.defect_count, color: STATUS_COLORS.defect },
-    { name: 'UNCERTAIN', value: stats.uncertain_count, color: STATUS_COLORS.uncertain },
-    { name: 'SKIPPED', value: stats.skipped_count, color: STATUS_COLORS.skipped },
+    { name: 'ACCEPTABLE', value: stats.ok_count, color: STATUS_COLORS.ok },
+    { name: 'DÉFAUT', value: stats.defect_count, color: STATUS_COLORS.defect },
+    { name: 'À VÉRIFIER', value: stats.uncertain_count, color: STATUS_COLORS.uncertain },
+    { name: 'NON ÉVALUÉ', value: stats.skipped_count, color: STATUS_COLORS.skipped },
   ].filter((d) => d.value > 0);
 
   const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: PieLabelRenderProps) => {
@@ -128,11 +128,11 @@ export default function Dashboard() {
           <div className="flex items-center gap-3">
             <div className="w-1 h-6 bg-primary" />
             <h1 className="text-xl font-bold text-foreground font-mono tracking-tight">
-              INSPECTION OVERVIEW
+              VUE D’ENSEMBLE DES INSPECTIONS
             </h1>
           </div>
           <p className="text-xs text-muted-foreground mt-1 font-mono ml-4">
-            YOLOv9c · 63 CLASSES · VLM QUALITY REASONING
+            YOLOv9c · 63 CLASSES · RAISONNEMENT QUALITÉ VLM
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -142,7 +142,7 @@ export default function Dashboard() {
               : <WifiOff className="w-3.5 h-3.5 text-[#ef4444]" />
             }
             <span className="text-xs font-mono" style={{ color: health?.status === 'ok' ? '#22c55e' : '#ef4444' }}>
-              {health?.status === 'ok' ? 'API ONLINE' : 'API OFFLINE'}
+              {health?.status === 'ok' ? 'API EN LIGNE' : 'API HORS LIGNE'}
             </span>
           </div>
         </div>
@@ -152,23 +152,23 @@ export default function Dashboard() {
         {/* Primary status metrics — status-first, dominant */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MetricCard
-            label="PASS" value={stats.ok_count}
-            sub={`${passRate}% pass rate`}
+            label="ACCEPTABLE" value={stats.ok_count}
+            sub={`${passRate}% taux acceptable`}
             icon={CheckCircle} color={STATUS_COLORS.ok} href="/reports" large
           />
           <MetricCard
-            label="DEFECT" value={stats.defect_count}
-            sub={`${defectRate}% defect rate`}
+            label="DÉFAUT" value={stats.defect_count}
+            sub={`${defectRate}% taux de défaut`}
             icon={AlertTriangle} color={STATUS_COLORS.defect} href="/reports" large
           />
           <MetricCard
-            label="UNCERTAIN" value={stats.uncertain_count}
-            sub="requires review"
+            label="À VÉRIFIER" value={stats.uncertain_count}
+            sub="vérification requise"
             icon={HelpCircle} color={STATUS_COLORS.uncertain}
           />
           <MetricCard
-            label="TOTAL SCANS" value={stats.total_inspections}
-            sub={`${stats.total_detections} objects · avg ${(stats.avg_confidence * 100).toFixed(1)}% conf`}
+            label="TOTAL DES INSPECTIONS" value={stats.total_inspections}
+            sub={`${stats.total_detections} produits · confiance moy. ${(stats.avg_confidence * 100).toFixed(1)}% conf`}
             icon={ScanLine} color="#f59e0b"
           />
         </div>
@@ -182,7 +182,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-1 h-4 bg-primary" />
                 <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest">
-                  STATUS DISTRIBUTION
+                  RÉPARTITION DES STATUTS
                 </h2>
               </div>
               <ResponsiveContainer width="100%" height={190}>
@@ -220,11 +220,11 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-1 h-4 bg-primary" />
                 <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest">
-                  TOP DETECTED CLASSES
+                  PRODUITS LES PLUS DÉTECTÉS
                 </h2>
               </div>
               <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={stats.top_classes} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
+                  <BarChart data={stats.top_classes.map((item) => ({ ...item, label: translateFoodLabel(item.label) }))} layout="vertical" margin={{ left: 8, right: 24, top: 4, bottom: 4 }}>
                   <XAxis
                     type="number"
                     tick={{ fontSize: 10, fill: '#4b5563', fontFamily: "'JetBrains Mono', monospace" }}
@@ -239,7 +239,7 @@ export default function Dashboard() {
                   <Tooltip
                     contentStyle={{ backgroundColor: '#0f1117', border: '1px solid #2a2f3e', borderRadius: 2, fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }}
                     cursor={{ fill: '#f59e0b0a' }}
-                    formatter={(v) => [`${v} detections`, 'Count']}
+                    formatter={(v) => [`${v} détection(s)`, 'Nombre']}
                   />
                   <Bar dataKey="count" radius={[0, 2, 2, 0]} maxBarSize={16}>
                     {stats.top_classes.map((_, i) => (
@@ -260,12 +260,12 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <div className="w-1 h-4 bg-primary" />
                 <h2 className="text-xs font-mono font-semibold text-muted-foreground uppercase tracking-widest">
-                  RECENT INSPECTIONS
+                  INSPECTIONS RÉCENTES
                 </h2>
               </div>
               <Link href="/reports">
                 <span className="text-xs text-primary hover:underline flex items-center gap-1 font-mono">
-                  VIEW ALL <ArrowRight className="w-3 h-3" />
+                  VOIR TOUT <ArrowRight className="w-3 h-3" />
                 </span>
               </Link>
             </div>
@@ -285,9 +285,9 @@ export default function Dashboard() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono text-foreground">FRAME #{result.frame_id}</span>
+                        <span className="text-sm font-mono text-foreground">IMAGE N°{result.frame_id}</span>
                         <span className="text-xs text-muted-foreground font-mono">·</span>
-                        <span className="text-xs text-muted-foreground font-mono">{result.num_detections} OBJ</span>
+                        <span className="text-xs text-muted-foreground font-mono">{result.num_detections} PRODUIT(S)</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <Clock className="w-3 h-3 text-muted-foreground" />
@@ -310,8 +310,8 @@ export default function Dashboard() {
               <div className="relative flex items-center gap-3">
                 <ScanLine className="w-6 h-6 text-primary" />
                 <div>
-                  <p className="text-sm font-bold text-foreground font-mono">RUN INSPECTION</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Upload image · YOLO + VLM</p>
+                  <p className="text-sm font-bold text-foreground font-mono">LANCER UNE INSPECTION</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Téléverser une image · YOLO + VLM</p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-primary ml-auto group-hover:translate-x-0.5 transition-transform" />
               </div>
@@ -323,8 +323,8 @@ export default function Dashboard() {
               <div className="relative flex items-center gap-3">
                 <TrendingUp className="w-6 h-6 text-muted-foreground" />
                 <div>
-                  <p className="text-sm font-bold text-foreground font-mono">VIEW REPORTS</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Browse inspection history</p>
+                  <p className="text-sm font-bold text-foreground font-mono">VOIR LES RAPPORTS</p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">Consulter l’historique des inspections</p>
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground ml-auto group-hover:translate-x-0.5 transition-transform" />
               </div>

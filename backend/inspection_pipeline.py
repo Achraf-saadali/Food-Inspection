@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, List, Optional
 
 import numpy as np
 from backend.quality_profiles import get_quality_metrics
+from backend.reporting import translate_defect, translate_object_label
 
 from backend.schemas import (
     Detection,
@@ -59,37 +60,37 @@ def crop_detection(image: np.ndarray, bbox_xyxy: List[float]) -> np.ndarray:
 
 def build_quality_commentary(label: str, quality: QualityAssessment) -> str:
     """Translate structured assessment values into an operator-ready paragraph."""
-    item_name = label.replace("_", " ").strip().capitalize()
+    item_name = translate_object_label(label)
     if quality.status == InspectionStatus.SKIPPED:
-        return f"{item_name} was detected, but quality was not assessed. Recommended action: no action required."
+        return f"{item_name} a été détecté, mais sa qualité n’a pas été évaluée. Action recommandée : aucune action nécessaire."
     if quality.status == InspectionStatus.UNCERTAIN:
-        evidence = quality.explanation.rstrip(".") or "the visual evidence was inconclusive"
-        return f"{item_name} needs manual review because {evidence}. Recommended action: flag for review."
+        evidence = quality.explanation.rstrip(".") or "les éléments visuels sont insuffisants"
+        return f"{item_name} doit être vérifié manuellement, car {evidence}. Action recommandée : vérification manuelle."
 
     score = (
-        f"Quality score: {quality.overall_quality_score:.2f}/1.00. "
+        f"Score qualité : {quality.overall_quality_score:.2f}/1,00. "
         if quality.overall_quality_score is not None
-        else "Quality score is unavailable. "
+        else "Score qualité indisponible. "
     )
     if quality.defects:
-        defects = ", ".join(defect.replace("_", " ") for defect in quality.defects)
-        evidence = f"Observed issue{'s' if len(quality.defects) > 1 else ''}: {defects}. "
+        defects = ", ".join(translate_defect(defect) for defect in quality.defects)
+        evidence = f"Problème{'s' if len(quality.defects) > 1 else ''} observé{'s' if len(quality.defects) > 1 else ''} : {defects}. "
     elif quality.status == InspectionStatus.OK:
-        evidence = "No visible quality defects were identified. "
+        evidence = "Aucun défaut visuel n’a été identifié. "
     elif quality.status == InspectionStatus.DEFECT:
-        evidence = "Visible quality concerns were identified. "
+        evidence = "Des problèmes de qualité visibles ont été identifiés. "
     elif quality.quality_metrics:
         weakest_metric, weakest_score = min(quality.quality_metrics.items(), key=lambda metric: metric[1])
-        evidence = f"The lowest assessed metric is {weakest_metric.replace('_', ' ')} at {weakest_score:.2f}. "
+        evidence = f"La métrique la plus faible est {weakest_metric.replace('_', ' ')} avec {weakest_score:.2f}. "
     else:
-        evidence = quality.explanation.rstrip(".") + ". " if quality.explanation else "Visible quality concerns were identified. "
+        evidence = quality.explanation.rstrip(".") + ". " if quality.explanation else "Des problèmes de qualité visibles ont été identifiés. "
 
     actions = {
-        RequiredAction.NONE: "no action required",
-        RequiredAction.FLAG_FOR_REVIEW: "flag for review",
-        RequiredAction.REMOVE: "remove from the saleable batch",
+        RequiredAction.NONE: "aucune action nécessaire",
+        RequiredAction.FLAG_FOR_REVIEW: "vérifier manuellement",
+        RequiredAction.REMOVE: "isoler du lot vendable",
     }
-    return f"{item_name}. {score}{evidence}Recommended action: {actions[quality.required_action]}."
+    return f"{item_name}. {score}{evidence}Action recommandée : {actions[quality.required_action]}."
 
 
 def run_inspection(
@@ -173,17 +174,17 @@ def run_inspection(
                 overall_quality_score=None,
                 quality_metrics={},
                 defects=[],
-                explanation="VLM reasoning skipped (low confidence or VLM disabled).",
+                explanation="Analyse qualité non effectuée : confiance insuffisante ou VLM désactivé.",
                 required_action=RequiredAction.NONE,
                 vlm_backend=vlm_backend.name if vlm_backend else "none",
             )
 
         # Keep a concise explanation beside the raw metrics for operators.
-        display_label = detection.label
+        display_label = translate_object_label(detection.label)
         if quality.detected_class:
             candidate_label = str(quality.detected_class).strip().lower()
             if candidate_label and candidate_label != detection.label:
-                display_label = candidate_label
+                display_label = translate_object_label(candidate_label)
         detection.display_label = display_label
         quality.commentary = build_quality_commentary(display_label, quality)
         items.append(InspectionItem(detection=detection, quality=quality))
