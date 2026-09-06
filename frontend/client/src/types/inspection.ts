@@ -79,6 +79,69 @@ export interface InspectionStats {
   action_counts: Record<RequiredAction, number>;
 }
 
+export interface FarmerObjectReport {
+  object_id: number;
+  object_type: string;
+  result: 'Acceptable' | 'À isoler' | 'À vérifier' | 'Non évalué';
+  problem: string[];
+  explanation: string;
+  action: string;
+  reliability: 'Élevée' | 'Moyenne' | 'Faible';
+  image_location: {
+    bbox_xyxy: number[];
+    bbox_normalized: number[];
+  };
+  technical_details: {
+    detector_confidence: number;
+    quality_score: number | null;
+    quality_metrics: Record<string, number>;
+    status_code: InspectionStatus;
+    required_action_code: RequiredAction;
+    vlm_backend: string;
+    latency_ms: number | null;
+  };
+}
+
+export interface FarmerReport {
+  decision: {
+    label: string;
+    severity: 'information' | 'success' | 'warning' | 'attention';
+    explanation: string;
+  };
+  summary: {
+    detected: number;
+    acceptable: number;
+    to_isolate: number;
+    to_review: number;
+    not_assessed: number;
+  };
+  actions: Array<{
+    priority: number;
+    type: string;
+    label: string;
+    object_ids: number[];
+  }>;
+  objects: FarmerObjectReport[];
+  warnings: string[];
+  technical_details: {
+    report_id: string | null;
+    frame_id: number;
+    source: string;
+    timestamp: string;
+    image_size: ImageSize;
+    mean_detector_confidence: number | null;
+    mean_quality_score: number | null;
+    metric_averages: Record<string, number>;
+  };
+  legacy_metrics: Record<string, unknown>;
+  farm_context?: Record<string, unknown>;
+}
+
+export interface FarmerReportResponse {
+  inspection: InspectionResult;
+  farmer_report: FarmerReport;
+}
+
 /** Model metadata */
 export interface ModelInfo {
   name: string;

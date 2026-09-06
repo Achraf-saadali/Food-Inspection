@@ -4,7 +4,13 @@
  * completed SQLite-backed results; this module contains no mock data.
  */
 
-import type { HealthStatus, InspectionResult, InspectionStats, ModelInfo } from '../types/inspection';
+import type {
+  FarmerReportResponse,
+  HealthStatus,
+  InspectionResult,
+  InspectionStats,
+  ModelInfo,
+} from '../types/inspection';
 import apiClient from './client';
 
 export async function detectImage(file: File, signal?: AbortSignal): Promise<InspectionResult> {
@@ -109,6 +115,14 @@ export async function getInspectionHistory(
   const { data } = await apiClient.get<InspectionResult[]>('/reports', {
     params: { limit, offset, ...options },
   });
+  return data;
+}
+
+/** Return the farmer-facing report for one persisted inspection. */
+export async function getFarmerReport(reportId: string): Promise<FarmerReportResponse> {
+  const { data } = await apiClient.get<FarmerReportResponse>(
+    `/reports/${encodeURIComponent(reportId)}/farmer-report`,
+  );
   return data;
 }
 
